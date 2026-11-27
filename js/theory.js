@@ -39,6 +39,7 @@
     dorian: 'ドリアン由来',
     neapolitan: 'ナポリの和音',
     passing: '経過和音',
+    restored: '保持したコード',
   };
 
   // deg: 主音から数えた音名の位置（0〜6）、semi: 主音からの半音数
@@ -211,9 +212,26 @@
   }
 
   function chordFromId(mode, id, q) {
+    if (!Object.hasOwn(QUALITIES, q)) return null;
+    // 固定・復元したコードは、生成候補にない度数・響きの組み合わせも保存する。
+    const restored = /^r([0-6])-(1[01]|[0-9])$/.exec(id);
+    if (restored) {
+      return makeChord({ id, deg: Number(restored[1]), semi: Number(restored[2]), tag: 'restored', target: null }, q);
+    }
     const entry = findEntry(mode, id);
-    if (!entry || !QUALITIES[q]) return null;
+    if (!entry) return null;
     return makeChord(entry, q);
+  }
+
+  // 実際のコード名と音は変えず、今のキーからの度数へ置き直す。
+  function rebaseChord(chord, fromKey, toKey, mode) {
+    if (mod(fromKey - toKey, 12) === 0) return chord;
+    const root = spellRoot(fromKey, mode, chord);
+    const deg = mod(root.letter - TONIC_SPELL[mode][mod(toKey, 12)][0], 7);
+    const semi = mod(rootPc(fromKey, chord) - toKey, 12);
+    const entry = POOLS[mode].find((candidate) => candidate.deg === deg && candidate.semi === semi
+      && [...candidate.tri, ...candidate.sev, ...candidate.ext].includes(chord.q));
+    return entry ? makeChord(entry, chord.q) : chordFromId(mode, `r${deg}-${semi}`, chord.q);
   }
 
   /**
@@ -351,7 +369,7 @@
   const api = {
     QUALITIES, POOLS, TAGS, MODE_LABEL, mod,
     tonicName, keyLabel, spellRoot, rootPc, chordName, romanName, romanStem, chordToneNames,
-    tagLabel, findEntry, chordFromId, generate, diatonicChords,
+    tagLabel, findEntry, chordFromId, rebaseChord, generate, diatonicChords,
     voiceChord, voiceProgression, bassNote, encodeChords, decodeChords,
   };
 

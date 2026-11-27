@@ -132,6 +132,36 @@ test('URL用の文字列から元に戻せる', () => {
   assert.equal(T.decodeChords('major', ''), null);
 });
 
+test('キーをまたいで復元したコードは、名前・音を保ち、今のキーの度数で共有できる', () => {
+  const restored = T.rebaseChord(chord('major', 'I', 'maj'), 0, 6, 'major');
+  assert.equal(T.chordName(6, 'major', restored), 'C');
+  assert.equal(T.romanName(restored, 'major'), '♭V');
+  assert.equal(T.tagLabel(restored, 'major'), '保持したコード');
+  const borrowed = T.rebaseChord(chord('major', 'I', 'maj'), 0, 2, 'major');
+  assert.deepEqual(borrowed, chord('major', 'bVII', 'maj'));
+
+  for (const mode of ['major', 'minor']) {
+    for (const entry of T.POOLS[mode]) {
+      for (const q of new Set([...entry.tri, ...entry.sev, ...entry.ext])) {
+        const original = chord(mode, entry.id, q);
+        for (let fromKey = 0; fromKey < 12; fromKey++) {
+          for (let toKey = 0; toKey < 12; toKey++) {
+            const rebased = T.rebaseChord(original, fromKey, toKey, mode);
+            assert.equal(T.chordName(toKey, mode, rebased), T.chordName(fromKey, mode, original));
+            assert.equal(T.rootPc(toKey, rebased), T.rootPc(fromKey, original));
+            assert.equal(T.bassNote(toKey, rebased), T.bassNote(fromKey, original));
+            assert.equal(rebased.q, q);
+            assert.deepEqual(T.decodeChords(mode, T.encodeChords([rebased])), [rebased]);
+          }
+        }
+      }
+    }
+  }
+  for (const invalid of ['r7-0.maj', 'r0-12.maj', 'r-1-0.maj', 'r0-0.nope', 'r0-0.constructor']) {
+    assert.equal(T.decodeChords('major', invalid), null);
+  }
+});
+
 test('ドラムのリズムパターンは小節内の指定拍に配置される', () => {
   const window = {};
   vm.runInNewContext(fs.readFileSync(require.resolve('../js/audio.js'), 'utf8'), { window });
