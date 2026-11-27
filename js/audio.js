@@ -4,6 +4,7 @@
 
   let ctx = null;
   let master = null;
+  let noiseBuffer = null;
 
   function ensureContext() {
     if (!ctx) {
@@ -117,6 +118,61 @@
     }
   }
 
+  function drumEvents(pattern) {
+    if (pattern === 'none') return [];
+    const events = [];
+    const kickBeats = pattern === 'four' ? [0, 1, 2, 3] : pattern === 'half' ? [0] : [0, 2];
+    const snareBeats = pattern === 'half' ? [2] : [1, 3];
+    kickBeats.forEach((beat) => events.push({ sound: 'kick', beat }));
+    snareBeats.forEach((beat) => events.push({ sound: 'snare', beat }));
+    for (let beat = 0; beat < 4; beat += 0.5) events.push({ sound: 'hat', beat });
+    return events;
+  }
+
+  function noiseHit(bus, t, dur, frequency, type, vel) {
+    if (!noiseBuffer) {
+      noiseBuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+      const data = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    }
+    const source = ctx.createBufferSource();
+    const filter = ctx.createBiquadFilter();
+    const env = ctx.createGain();
+    source.buffer = noiseBuffer;
+    filter.type = type;
+    filter.frequency.value = frequency;
+    env.gain.setValueAtTime(vel, t);
+    env.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    source.connect(filter).connect(env).connect(bus);
+    source.start(t);
+    source.stop(t + dur);
+  }
+
+  function drumHit(bus, sound, t, beat) {
+    if (sound === 'kick') {
+      const osc = ctx.createOscillator();
+      const env = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(150, t);
+      osc.frequency.exponentialRampToValueAtTime(45, t + 0.12);
+      env.gain.setValueAtTime(0.65, t);
+      env.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+      osc.connect(env).connect(bus);
+      osc.start(t);
+      osc.stop(t + 0.19);
+    } else if (sound === 'snare') {
+      noiseHit(bus, t, beat * 0.35, 1800, 'lowpass', 0.28);
+    } else {
+      noiseHit(bus, t, beat * 0.12, 7500, 'highpass', 0.12);
+    }
+  }
+
+  function scheduleDrums(bus, pattern, t, beat) {
+    drumEvents(pattern).forEach(({ sound, beat: offset }) => {
+      drumHit(bus, sound, t + offset * beat, beat);
+    });
+  }
+
   // ループ再生。getState() は毎小節の頭で呼ばれ、最新のコード・テンポを返す
   const Player = {
     playing: false,
@@ -138,6 +194,7 @@
           const beat = 60 / s.bpm;
           const i = this.bar % s.voicings.length;
           scheduleBar(this.bus, s.style, s.voicings[i], s.bass[i], this.next, beat);
+          scheduleDrums(this.bus, s.rhythm, this.next, beat);
           this.queue.push({ bar: i, time: this.next });
           this.next += beat * 4;
           this.bar += 1;
@@ -172,5 +229,5 @@
     chordAt(previewBus, voicing, bass, ctx.currentTime + 0.02, 1.6);
   }
 
-  global.ChordAudio = { Player, preview };
+  global.ChordAudio = { Player, preview, drumEvents };
 })(window);
