@@ -192,13 +192,17 @@
   }
 
   function renderKeySelect() {
+    // 選択中の欄を乱さないよう、選択肢は作り直さず表記だけ更新する
     const sel = $('key');
-    sel.innerHTML = '';
     for (let pc = 0; pc < 12; pc++) {
-      const o = document.createElement('option');
-      o.value = String(pc);
-      o.textContent = T.tonicName(pc, state.mode);
-      sel.appendChild(o);
+      let o = sel.children[pc];
+      if (!o) {
+        o = document.createElement('option');
+        o.value = String(pc);
+        sel.appendChild(o);
+      }
+      const label = T.tonicName(pc, state.mode);
+      if (o.textContent !== label) o.textContent = label;
     }
     sel.value = String(state.keyPc);
   }
@@ -437,16 +441,19 @@
       renderHistory();
     });
 
-    // マウスで押したボタンからフォーカスを外し、ショートカットが効くようにする
-    let pointer = false;
-    document.addEventListener('pointerdown', () => { pointer = true; }, true);
-    document.addEventListener('keydown', () => { pointer = false; }, true);
-    const release = (e) => {
-      const el = e.target.closest && e.target.closest('button, input[type=checkbox], select');
-      if (pointer && el) el.blur();
-    };
-    document.addEventListener('click', release);
-    document.addEventListener('change', release);
+    // マウス・タッチで押したボタンからフォーカスを外し、ショートカットが効くようにする。
+    // 選択欄は click で外すと開いたばかりのピッカーが閉じるため、マウスで選び終えた change のときだけ外す。
+    let pointer = '';
+    document.addEventListener('pointerdown', (e) => { pointer = e.pointerType || ''; }, true);
+    document.addEventListener('keydown', () => { pointer = ''; }, true);
+    document.addEventListener('click', (e) => {
+      const el = pointer && e.target.closest && e.target.closest('button, input[type=checkbox]');
+      if (el) el.blur();
+    });
+    document.addEventListener('change', (e) => {
+      const el = pointer === 'mouse' && e.target.closest && e.target.closest('select');
+      if (el) el.blur();
+    });
 
     document.addEventListener('keydown', (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;

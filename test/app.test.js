@@ -47,7 +47,7 @@ function openApp(hash, entries, { random = Math.random } = {}) {
     localStorage: { getItem: (k) => storage.get(k), setItem: (k, v) => storage.set(k, v) },
   });
   return {
-    node: (id) => nodes.get(id), entries: () => JSON.parse(storage.get(historyKey)), window, location, previews,
+    node: (id) => nodes.get(id), entries: () => JSON.parse(storage.get(historyKey)), window, document, location, previews,
     names: () => nodes.get('bars').children.map((card) => card.html.match(/<span class="name">([^<]+)</)[1]),
     clickBar(i, button) {
       const bars = nodes.get('bars');
@@ -66,6 +66,41 @@ test('playback button keeps its symbol, tooltip and accessible action in sync', 
     assert.equal(play['aria-label'], action);
     assert.equal(play.title, `${action} (Space)`);
   }
+});
+
+test('tapping or clicking a select keeps its picker open; only a mouse choice drops focus', () => {
+  const app = openApp('#m=major&k=0&c=I.maj_IV.maj&t=90&b=2', []);
+  const control = (tag) => {
+    const el = { blurred: 0, blur() { this.blurred += 1; } };
+    el.closest = (selector) => (selector.split(',').map((s) => s.trim()).includes(tag) ? el : null);
+    return el;
+  };
+  for (const pointerType of ['mouse', 'touch']) {
+    const select = control('select');
+    app.document.pointerdown({ pointerType });
+    app.document.click({ target: select });
+    assert.equal(select.blurred, 0, `${pointerType}: opening the picker`);
+    app.document.change({ target: select });
+    assert.equal(select.blurred, pointerType === 'mouse' ? 1 : 0, `${pointerType}: after choosing`);
+    const button = control('button');
+    app.document.click({ target: button });
+    assert.equal(button.blurred, 1, `${pointerType}: button`);
+  }
+});
+
+test('key options are updated in place instead of being rebuilt', () => {
+  const app = openApp('#m=major&k=0&c=I.maj_IV.maj&t=90&b=2', []);
+  const key = app.node('key');
+  const options = key.children.slice();
+  assert.equal(options.length, 12);
+  app.node('mode').click({ target: { closest: () => ({ dataset: { v: 'minor' } }) } });
+  key.change({ target: { value: '3' } });
+  assert.equal(key.children.length, 12);
+  key.children.forEach((o, pc) => {
+    assert.equal(o, options[pc]);
+    assert.equal(o.textContent, T.tonicName(pc, 'minor'));
+  });
+  assert.equal(key.value, '3');
 });
 
 test('共有URL・移調・1小節の再提案を履歴からお気に入りにできる', () => {
