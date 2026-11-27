@@ -21,6 +21,7 @@
     rhythm: 'none',
     color: 'mix',
     outside: '0.2',
+    feel: 'balanced',
     startTonic: false,
     randomKey: true,
     settingsVersion: 2,
@@ -31,6 +32,7 @@
   const storedSettings = loadJson(STORE_SETTINGS, {});
   const state = Object.assign({}, defaults, storedSettings);
   if ((storedSettings.settingsVersion || 1) < 2) state.randomKey = true;
+  if (!Object.hasOwn(T.FEELS, state.feel)) state.feel = defaults.feel;
   state.chords = [];
   state.bars = BAR_COUNTS.includes(Number(state.bars)) ? Number(state.bars) : 4;
   state.locks = Array.from({ length: state.bars }, () => false);
@@ -84,6 +86,7 @@
       mode: state.mode,
       color: state.color,
       outside: Number(state.outside),
+      feel: state.feel,
       startTonic: state.startTonic,
       bars: state.bars,
     }, extra);
@@ -245,6 +248,7 @@
     }
     renderSeg('color', state.color);
     renderSeg('outside', state.outside);
+    renderSeg('feel', state.feel);
     renderSeg('minorRef', state.minorRef);
     renderSeg('historyFilter', state.historyFilter);
     $('bpm').value = state.bpm;
@@ -461,6 +465,7 @@
     }
     bindSeg('color', (v) => { state.color = v; renderSeg('color', v); renderDiatonic(); saveSettings(); });
     bindSeg('outside', (v) => { state.outside = v; renderSeg('outside', v); saveSettings(); });
+    bindSeg('feel', (v) => { state.feel = v; renderSeg('feel', v); saveSettings(); });
     bindSeg('minorRef', (v) => { state.minorRef = v; render(false, null); });
     bindSeg('historyFilter', (v) => { state.historyFilter = v; renderSeg('historyFilter', v); renderHistory(); saveSettings(); });
 

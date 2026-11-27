@@ -24,7 +24,7 @@ function element() {
   };
 }
 
-function openApp(hash, entries, { random = Math.random } = {}) {
+function openApp(hash, entries, { random = Math.random, theory = T, settings } = {}) {
   const html = fs.readFileSync(require.resolve('../index.html'), 'utf8');
   const nodes = new Map(Array.from(html.matchAll(/ id="([^"]+)"/g), (m) => [m[1], Object.assign(element(), { id: m[1] })]));
   for (const [, id, content] of html.matchAll(/<select id="([^"]+)">([\s\S]*?)<\/select>/g)) {
@@ -36,10 +36,11 @@ function openApp(hash, entries, { random = Math.random } = {}) {
   }
   const historyKey = 'chord-roulette:history';
   const storage = new Map([[historyKey, JSON.stringify(entries)]]);
+  if (settings) storage.set('chord-roulette:settings', JSON.stringify(settings));
   const location = { hash };
   const previews = [];
   const window = Object.assign(element(), {
-    ChordTheory: T,
+    ChordTheory: theory,
     ChordAudio: {
       preview: (notes, bass) => previews.push({ notes, bass }),
       Player: { playing: false, start(getState) { this.playing = true; this.getState = getState; }, stop() { this.playing = false; } },
@@ -137,6 +138,24 @@ test('phone choices commit to the loop and keep the labels, settings and live pl
   app.location.hash = '#m=minor&k=1&c=Im.m_IVm.m&t=80&b=2';
   app.window.hashchange();
   assert.equal(app.node('keyPicker').querySelector('strong').textContent, T.tonicName(1, 'minor'));
+});
+
+test('Feel は以前の設定がなければ Balanced で、選んだものが提案に使われ保存される', () => {
+  const feels = [];
+  const theory = Object.assign({}, T, { generate: (opts, ...rest) => { feels.push(opts.feel); return T.generate(opts, ...rest); } });
+  const app = openApp('', [], { theory, settings: { outside: '0', settingsVersion: 2 } });
+  assert.deepEqual(feels, ['balanced']);
+
+  app.node('feel').click({ target: { closest: () => ({ dataset: { v: 'smooth' } }) } });
+  assert.equal(app.settings().feel, 'smooth');
+  app.node('roll').click();
+  app.clickBar(1, '.reroll');
+  assert.deepEqual(feels.slice(1), ['smooth', 'smooth']);
+
+  const reopened = [];
+  const spy = Object.assign({}, T, { generate: (opts, ...rest) => { reopened.push(opts.feel); return T.generate(opts, ...rest); } });
+  openApp('', [], { theory: spy, settings: app.settings() });
+  assert.deepEqual(reopened, ['smooth']);
 });
 
 test('共有URL・移調・1小節の再提案を履歴からお気に入りにできる', () => {
