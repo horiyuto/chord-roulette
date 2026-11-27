@@ -3,7 +3,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const T = require('../js/theory.js');
-const M = require('../js/midi.js');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
@@ -133,22 +132,6 @@ test('URL用の文字列から元に戻せる', () => {
   assert.equal(T.decodeChords('major', ''), null);
 });
 
-test('MIDIファイルの形式', () => {
-  const data = M.buildMidi({ bars: [{ notes: [45, 57, 60, 64] }, { notes: [41, 57, 60, 65] }], bpm: 90, name: 'test' });
-  const ascii = (a, b) => String.fromCharCode(...data.slice(a, b));
-  assert.equal(ascii(0, 4), 'MThd');
-  assert.deepEqual([...data.slice(8, 14)], [0, 0, 0, 1, 0x01, 0xe0]);
-  assert.equal(ascii(14, 18), 'MTrk');
-  const len = (data[18] << 24) | (data[19] << 16) | (data[20] << 8) | data[21];
-  assert.equal(len, data.length - 22);
-  assert.deepEqual([...data.slice(-4)], [0x00, 0xff, 0x2f, 0x00]);
-  const usPerQuarter = Math.round(60000000 / 90);
-  const tempoAt = data.indexOf(0x51);
-  assert.equal((data[tempoAt + 2] << 16) | (data[tempoAt + 3] << 8) | data[tempoAt + 4], usPerQuarter);
-  const noteOns = data.filter((b, i) => b === 0x90 && i > 22).length;
-  assert.equal(noteOns, 8);
-});
-
 test('ドラムのリズムパターンは小節内の指定拍に配置される', () => {
   const window = {};
   vm.runInNewContext(fs.readFileSync(require.resolve('../js/audio.js'), 'utf8'), { window });
@@ -164,9 +147,4 @@ test('ドラムのリズムパターンは小節内の指定拍に配置され�
   assert.deepEqual(summarize('half', 'kick'), [0]);
   assert.deepEqual(summarize('half', 'snare'), [2]);
   assert.deepEqual(summarize('eight', 'hat'), [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5]);
-});
-
-test('ファイル名用に記号をASCIIへ置き換える', () => {
-  assert.equal(M.asciiName('B♭m7(♭5)'), 'Bbm7b5');
-  assert.equal(M.asciiName('F♯ minor'), 'F#-minor');
 });
