@@ -118,14 +118,45 @@
     }
   }
 
-  function drumEvents(pattern) {
-    if (pattern === 'none') return [];
+  // 空白で区切った1かたまりが1拍。拍の中は文字数で等分する（2文字=8分、3文字=3連、4文字=16分）。
+  // x=通常、o=弱く、.=休み。8拍分書いたパターンは2小節でひと回りする。
+  const DRUM_PATTERNS = {
+    none: {},
+    eight: { kick: 'x . x .', snare: '. x . x', hat: 'xx xx xx xx' },
+    sixteen: { kick: 'x..x .... x.x. ....', snare: '. x . x', hat: 'xoxo xoxo xoxo xoxo' },
+    four: { kick: 'x x x x', snare: '. x . x', hat: 'xx xx xx xx' },
+    half: { kick: 'x . . .', snare: '. . x .', hat: 'xx xx xx xx' },
+    shuffle: { kick: 'x.. ... x.x ...', snare: '. x . x', hat: 'x.x x.x x.x x.x' },
+    ballad: { kick: 'x. .. x. .x', rim: '. x . x', hat: 'xo xo xo xo' },
+    triplet: { kick: 'x.. ... x.. ...', snare: '. x . x', hat: 'xoo xoo xoo xoo' },
+    disco: { kick: 'x x x x', snare: '. x . x', hat: 'xo.o xo.o xo.o xo.o', open: '..x. ..x. ..x. ..x.' },
+    funk: {
+      kick: 'x..x ..x. ..x. ....',
+      snare: '.... x..o .o.. x..o',
+      hat: 'xoxo xoxo xoxo xo..',
+      open: '.... .... .... ..x.',
+    },
+    hiphop: { kick: 'x... ...x ..x. ....', snare: '. x . x', hat: 'xo xo xo xo' },
+    trap: { kick: 'x..x .... ..x. .x..', clap: '. . x .', hat: 'xx xx xx xxxxxx' },
+    reggaeton: { kick: 'x x x x', snare: '...x ..x. ...x ..x.', hat: 'xx xx xx xx' },
+    jazz: { ride: 'x.. x.x x.. x.x', hat: '. x . x', snare: '... ... ..o ...' },
+    bossa: { kick: 'x. .x x. .x', rim: 'x. .x .. x. .. x. .x ..', hat: 'xo xo xo xo' },
+    reggae: { kick: '. . x .', rim: '. . x .', hat: 'x.o x.o x.o x.o' },
+  };
+  const SOFT = 0.45;
+
+  function drumEvents(pattern, bar) {
+    const parts = DRUM_PATTERNS[pattern] || {};
     const events = [];
-    const kickBeats = pattern === 'four' ? [0, 1, 2, 3] : pattern === 'half' ? [0] : [0, 2];
-    const snareBeats = pattern === 'half' ? [2] : [1, 3];
-    kickBeats.forEach((beat) => events.push({ sound: 'kick', beat }));
-    snareBeats.forEach((beat) => events.push({ sound: 'snare', beat }));
-    for (let beat = 0; beat < 4; beat += 0.5) events.push({ sound: 'hat', beat });
+    Object.keys(parts).forEach((sound) => {
+      const groups = parts[sound].trim().split(/\s+/);
+      const start = ((bar || 0) % (groups.length / 4)) * 4;
+      groups.slice(start, start + 4).forEach((group, i) => {
+        Array.from(group).forEach((ch, j) => {
+          if (ch !== '.') events.push({ sound, beat: i + j / group.length, vel: ch === 'o' ? SOFT : 1 });
+        });
+      });
+    });
     return events;
   }
 
@@ -148,28 +179,73 @@
     source.stop(t + dur);
   }
 
-  function drumHit(bus, sound, t, beat) {
+  function toneHit(bus, t, dur, frequency, vel) {
+    const osc = ctx.createOscillator();
+    const env = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.value = frequency;
+    env.gain.setValueAtTime(vel, t);
+    env.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    osc.connect(env).connect(bus);
+    osc.start(t);
+    osc.stop(t + dur);
+  }
+
+  // 金属的なライド。周波数のずれた矩形波を重ねて高域だけ残す（TR-808のシンバルと同じ考え方）
+  function metalHit(bus, t, dur, vel) {
+    const band = ctx.createBiquadFilter();
+    const high = ctx.createBiquadFilter();
+    const env = ctx.createGain();
+    band.type = 'bandpass';
+    band.frequency.value = 9000;
+    high.type = 'highpass';
+    high.frequency.value = 6000;
+    env.gain.setValueAtTime(vel, t);
+    env.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    band.connect(high).connect(env).connect(bus);
+    [205.3, 304.4, 369.6, 522.7, 540, 800].forEach((f) => {
+      const osc = ctx.createOscillator();
+      osc.type = 'square';
+      osc.frequency.value = f;
+      osc.connect(band);
+      osc.start(t);
+      osc.stop(t + dur);
+    });
+  }
+
+  function drumHit(bus, sound, t, beat, vel) {
     if (sound === 'kick') {
       const osc = ctx.createOscillator();
       const env = ctx.createGain();
       osc.type = 'sine';
       osc.frequency.setValueAtTime(150, t);
       osc.frequency.exponentialRampToValueAtTime(45, t + 0.12);
-      env.gain.setValueAtTime(0.65, t);
+      env.gain.setValueAtTime(0.65 * vel, t);
       env.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
       osc.connect(env).connect(bus);
       osc.start(t);
       osc.stop(t + 0.19);
     } else if (sound === 'snare') {
-      noiseHit(bus, t, beat * 0.35, 1800, 'lowpass', 0.28);
+      noiseHit(bus, t, beat * 0.35, 1800, 'lowpass', 0.28 * vel);
+    } else if (sound === 'open') {
+      noiseHit(bus, t, beat * 0.45, 7000, 'highpass', 0.07 * vel);
+    } else if (sound === 'clap') {
+      [0, 0.012, 0.024].forEach((d) => noiseHit(bus, t + d, 0.03, 1300, 'bandpass', 0.4 * vel));
+      noiseHit(bus, t + 0.03, beat * 0.25, 1300, 'bandpass', 0.3 * vel);
+    } else if (sound === 'rim') {
+      toneHit(bus, t, 0.035, 1700, 0.12 * vel);
+      toneHit(bus, t, 0.05, 480, 0.12 * vel);
+      noiseHit(bus, t, 0.03, 4000, 'bandpass', 0.1 * vel);
+    } else if (sound === 'ride') {
+      metalHit(bus, t, Math.min(beat * 0.8, 0.9), 0.1 * vel);
     } else {
-      noiseHit(bus, t, beat * 0.12, 7500, 'highpass', 0.12);
+      noiseHit(bus, t, beat * 0.12, 7500, 'highpass', 0.12 * vel);
     }
   }
 
-  function scheduleDrums(bus, pattern, t, beat) {
-    drumEvents(pattern).forEach(({ sound, beat: offset }) => {
-      drumHit(bus, sound, t + offset * beat, beat);
+  function scheduleDrums(bus, pattern, bar, t, beat) {
+    drumEvents(pattern, bar).forEach(({ sound, beat: offset, vel }) => {
+      drumHit(bus, sound, t + offset * beat, beat, vel);
     });
   }
 
@@ -194,7 +270,7 @@
           const beat = 60 / s.bpm;
           const i = this.bar % s.voicings.length;
           scheduleBar(this.bus, s.style, s.voicings[i], s.bass[i], this.next, beat);
-          scheduleDrums(this.bus, s.rhythm, this.next, beat);
+          scheduleDrums(this.bus, s.rhythm, this.bar, this.next, beat);
           this.queue.push({ bar: i, time: this.next });
           this.next += beat * 4;
           this.bar += 1;

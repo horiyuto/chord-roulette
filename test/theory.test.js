@@ -148,3 +148,42 @@ test('ドラムのリズムパターンは小節内の指定拍に配置され�
   assert.deepEqual(summarize('half', 'snare'), [2]);
   assert.deepEqual(summarize('eight', 'hat'), [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5]);
 });
+
+test('増やしたリズムも3連・弱い音・2小節でひと回りするパターンを拍どおりに並べる', () => {
+  const window = {};
+  vm.runInNewContext(fs.readFileSync(require.resolve('../js/audio.js'), 'utf8'), { window });
+  const events = (pattern, bar) => Array.from(window.ChordAudio.drumEvents(pattern, bar));
+  const beats = (pattern, sound, bar) => events(pattern, bar)
+    .filter((event) => event.sound === sound)
+    .map((event) => event.beat);
+
+  assert.deepEqual(beats('shuffle', 'hat'), [0, 2 / 3, 1, 1 + 2 / 3, 2, 2 + 2 / 3, 3, 3 + 2 / 3]);
+  assert.deepEqual(beats('trap', 'hat').filter((beat) => beat >= 3),
+    [3, 3 + 1 / 6, 3 + 2 / 6, 3 + 3 / 6, 3 + 4 / 6, 3 + 5 / 6]);
+
+  const funkSnare = events('funk').filter((event) => event.sound === 'snare');
+  assert.deepEqual(funkSnare.filter((event) => event.vel === 1).map((event) => event.beat), [1, 3]);
+  assert.ok(funkSnare.some((event) => event.vel < 1));
+
+  assert.deepEqual(beats('bossa', 'rim', 0), [0, 1.5, 3]);
+  assert.deepEqual(beats('bossa', 'rim', 1), [1, 2.5]);
+  assert.deepEqual(events('nope'), []);
+
+  const html = fs.readFileSync(require.resolve('../index.html'), 'utf8');
+  const select = html.match(/<select id="rhythm">([\s\S]*?)<\/select>/)[1];
+  const patterns = Array.from(select.matchAll(/<option value="(\w+)"/g), (m) => m[1]);
+  ['none', 'eight', 'four', 'half'].forEach((saved) => assert.ok(patterns.includes(saved), saved));
+  const sounds = ['kick', 'snare', 'hat', 'open', 'clap', 'rim', 'ride'];
+  patterns.filter((pattern) => pattern !== 'none').forEach((pattern) => {
+    [0, 1].forEach((bar) => {
+      const list = events(pattern, bar);
+      assert.ok(list.length > 0, pattern);
+      list.forEach((event) => {
+        assert.ok(sounds.includes(event.sound), `${pattern}: ${event.sound}`);
+        assert.ok(event.beat >= 0 && event.beat < 4, `${pattern}: ${event.beat}`);
+      });
+      assert.deepEqual(events(pattern, bar + 2), list, pattern);
+    });
+    if (pattern !== 'bossa') assert.deepEqual(events(pattern, 1), events(pattern, 0), pattern);
+  });
+});

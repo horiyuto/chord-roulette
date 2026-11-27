@@ -161,7 +161,11 @@
     renderSeg('mode', state.mode);
     renderSeg('style', state.style);
     renderSeg('barCount', String(state.bars));
-    renderSeg('rhythm', state.rhythm);
+    $('rhythm').value = state.rhythm;
+    if ($('rhythm').value !== state.rhythm) {
+      state.rhythm = 'none';
+      $('rhythm').value = 'none';
+    }
     renderSeg('color', state.color);
     renderSeg('outside', state.outside);
     renderSeg('minorRef', state.minorRef);
@@ -358,7 +362,7 @@
       saveSettings();
     });
     bindSeg('style', (v) => { state.style = v; renderSeg('style', v); saveSettings(); });
-    bindSeg('rhythm', (v) => { state.rhythm = v; renderSeg('rhythm', v); saveSettings(); });
+    $('rhythm').addEventListener('change', (e) => { state.rhythm = e.target.value; saveSettings(); });
     bindSeg('color', (v) => { state.color = v; renderSeg('color', v); renderDiatonic(); saveSettings(); });
     bindSeg('outside', (v) => { state.outside = v; renderSeg('outside', v); saveSettings(); });
     bindSeg('minorRef', (v) => { state.minorRef = v; render(false, null); });
