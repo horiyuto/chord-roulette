@@ -19,13 +19,21 @@ function element() {
       return selectors.get(selector);
     },
     closest(selector) { return this.querySelector(selector); },
+    focus() { this.focused = true; },
     addEventListener(type, handler) { this[type] = handler; },
   };
 }
 
 function openApp(hash, entries, { random = Math.random } = {}) {
   const html = fs.readFileSync(require.resolve('../index.html'), 'utf8');
-  const nodes = new Map(Array.from(html.matchAll(/ id="([^"]+)"/g), (m) => [m[1], element()]));
+  const nodes = new Map(Array.from(html.matchAll(/ id="([^"]+)"/g), (m) => [m[1], Object.assign(element(), { id: m[1] })]));
+  for (const [, id, content] of html.matchAll(/<select id="([^"]+)">([\s\S]*?)<\/select>/g)) {
+    const select = nodes.get(id);
+    select.options = select.children;
+    for (const [, value, textContent] of content.matchAll(/<option value="([^"]+)">([^<]+)<\/option>/g)) {
+      select.appendChild({ value, textContent });
+    }
+  }
   const historyKey = 'chord-roulette:history';
   const storage = new Map([[historyKey, JSON.stringify(entries)]]);
   const location = { hash };
@@ -34,7 +42,7 @@ function openApp(hash, entries, { random = Math.random } = {}) {
     ChordTheory: T,
     ChordAudio: {
       preview: (notes, bass) => previews.push({ notes, bass }),
-      Player: { playing: false, start() { this.playing = true; }, stop() { this.playing = false; } },
+      Player: { playing: false, start(getState) { this.playing = true; this.getState = getState; }, stop() { this.playing = false; } },
     },
     history: { replaceState(_state, _title, url) { location.hash = url; } },
   });
@@ -48,6 +56,7 @@ function openApp(hash, entries, { random = Math.random } = {}) {
   });
   return {
     node: (id) => nodes.get(id), entries: () => JSON.parse(storage.get(historyKey)), window, document, location, previews,
+    settings: () => JSON.parse(storage.get('chord-roulette:settings')),
     names: () => nodes.get('bars').children.map((card) => card.html.match(/<span class="name">([^<]+)</)[1]),
     clickBar(i, button) {
       const bars = nodes.get('bars');
@@ -101,6 +110,33 @@ test('key options are updated in place instead of being rebuilt', () => {
     assert.equal(o.textContent, T.tonicName(pc, 'minor'));
   });
   assert.equal(key.value, '3');
+});
+
+test('phone choices commit to the loop and keep the labels, settings and live playback in sync', () => {
+  const app = openApp('#m=major&k=0&c=I.maj_IV.maj&t=90&b=2', []);
+  app.node('play').click();
+  for (const [id, label, value] of [['key', 'G', '7'], ['style', 'Arpeggio', 'arp'], ['rhythm', 'Bossa nova', 'bossa']]) {
+    const picker = app.node(`${id}Picker`);
+    const buttons = picker.querySelector('.choices').children;
+    const choice = buttons.find((b) => b.textContent === label);
+    assert.ok(choice);
+    picker.open = true;
+    picker.click({ target: { closest: () => choice } });
+    assert.equal(app.node(id).value, value);
+    assert.deepEqual(buttons.filter((b) => b['aria-pressed'] === 'true'), [choice]);
+    assert.equal(picker.querySelector('strong').textContent, label);
+    assert.equal(picker.open, false);
+    assert.equal(picker.querySelector('summary').focused, true);
+  }
+  assert.deepEqual(app.names(), ['G', 'C']);
+  assert.equal(new URLSearchParams(app.location.hash.slice(1)).get('k'), '7');
+  const playback = app.window.ChordAudio.Player.getState();
+  assert.deepEqual([playback.style, playback.rhythm], ['arp', 'bossa']);
+  assert.deepEqual([app.settings().style, app.settings().rhythm], ['arp', 'bossa']);
+
+  app.location.hash = '#m=minor&k=1&c=Im.m_IVm.m&t=80&b=2';
+  app.window.hashchange();
+  assert.equal(app.node('keyPicker').querySelector('strong').textContent, T.tonicName(1, 'minor'));
 });
 
 test('共有URL・移調・1小節の再提案を履歴からお気に入りにできる', () => {
