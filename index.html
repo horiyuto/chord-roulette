@@ -1,98 +1,97 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>コードルーレット｜コード進行をランダムに提案</title>
-  <meta name="description" content="2・4・8小節のコード進行をランダムに提案します。コード名と度数表記（IIm、IV など）を見ながら、選んだドラムパターンに合わせて試聴できます。">
+  <title>Chord Roulette</title>
+  <meta name="description" content="Roll a chord progression and play it as a 2-, 4- or 8-bar loop with drums.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%B2%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="site-header">
-    <h1>コードルーレット</h1>
+    <h1>Chord Roulette</h1>
   </header>
 
   <main>
-    <section class="panel controls" aria-label="基本設定">
+    <section class="panel controls" aria-label="Loop settings">
       <div class="field">
-        <span class="label">キー</span>
-        <select id="key" aria-label="主音"></select>
-        <div class="seg" id="mode" role="group" aria-label="メジャー／マイナー">
-          <button type="button" data-v="major">メジャー</button>
-          <button type="button" data-v="minor">マイナー</button>
+        <label class="label" for="key">Key</label>
+        <select id="key"></select>
+        <div class="seg" id="mode" role="group" aria-label="Mode">
+          <button type="button" data-v="major">Major</button>
+          <button type="button" data-v="minor">Minor</button>
         </div>
       </div>
       <div class="field">
-        <label class="label" for="bpm">テンポ</label>
+        <label class="label" for="bpm">BPM</label>
         <input type="range" id="bpm" min="50" max="180" step="1">
         <output id="bpmOut" for="bpm"></output>
-        <span class="unit">BPM</span>
       </div>
       <div class="field">
-        <label class="label" for="style">弾き方</label>
+        <label class="label" for="style">Style</label>
         <select id="style">
-          <optgroup label="伸ばす">
-            <option value="whole">白玉</option>
-            <option value="pad">パッド</option>
+          <optgroup label="Sustained">
+            <option value="whole">Whole notes</option>
+            <option value="pad">Pad</option>
           </optgroup>
-          <optgroup label="刻む">
-            <option value="quarter">4分刻み</option>
-            <option value="eighth">8分刻み</option>
-            <option value="sync">シンコペーション</option>
-            <option value="offbeat">裏打ち</option>
-            <option value="strum">ストローク</option>
+          <optgroup label="Rhythmic">
+            <option value="quarter">Quarter notes</option>
+            <option value="eighth">Eighth notes</option>
+            <option value="sync">Syncopation</option>
+            <option value="offbeat">Offbeat</option>
+            <option value="strum">Strum</option>
           </optgroup>
-          <optgroup label="アルペジオ">
-            <option value="arp">アルペジオ</option>
-            <option value="arp3">アルペジオ（3連）</option>
-            <option value="arp16">アルペジオ（16分）</option>
-            <option value="alberti">アルベルティ</option>
+          <optgroup label="Arpeggios">
+            <option value="arp">Arpeggio</option>
+            <option value="arp3">Triplet arp</option>
+            <option value="arp16">16th-note arp</option>
+            <option value="alberti">Alberti bass</option>
           </optgroup>
         </select>
       </div>
       <div class="field">
-        <span class="label">小節数</span>
-        <div class="seg" id="barCount" role="group" aria-label="コード進行の小節数">
-          <button type="button" data-v="2">2小節</button>
-          <button type="button" data-v="4">4小節</button>
-          <button type="button" data-v="8">8小節</button>
+        <span class="label">Bars</span>
+        <div class="seg" id="barCount" role="group" aria-label="Bars">
+          <button type="button" data-v="2">2</button>
+          <button type="button" data-v="4">4</button>
+          <button type="button" data-v="8">8</button>
         </div>
       </div>
       <div class="field">
-        <label class="label" for="rhythm">リズム</label>
+        <label class="label" for="rhythm">Drums</label>
         <select id="rhythm">
-          <option value="none">なし</option>
-          <optgroup label="基本">
-            <option value="eight">8ビート</option>
-            <option value="sixteen">16ビート</option>
-            <option value="four">4つ打ち</option>
-            <option value="half">ハーフタイム</option>
-            <option value="shuffle">シャッフル</option>
+          <option value="none">Off</option>
+          <optgroup label="Basic">
+            <option value="eight">Straight 8ths</option>
+            <option value="sixteen">Straight 16ths</option>
+            <option value="four">Four on the floor</option>
+            <option value="half">Half-time</option>
+            <option value="shuffle">Shuffle</option>
           </optgroup>
-          <optgroup label="バラード">
-            <option value="ballad">バラード</option>
-            <option value="triplet">バラード（3連）</option>
+          <optgroup label="Ballads">
+            <option value="ballad">Ballad</option>
+            <option value="triplet">Triplet ballad</option>
           </optgroup>
-          <optgroup label="ダンス・ヒップホップ">
-            <option value="disco">ディスコ</option>
-            <option value="funk">ファンク</option>
-            <option value="hiphop">ヒップホップ</option>
-            <option value="trap">トラップ</option>
-            <option value="reggaeton">レゲトン</option>
+          <optgroup label="Dance &amp; hip-hop">
+            <option value="disco">Disco</option>
+            <option value="funk">Funk</option>
+            <option value="hiphop">Hip-hop</option>
+            <option value="trap">Trap</option>
+            <option value="reggaeton">Reggaeton</option>
           </optgroup>
-          <optgroup label="ジャズ・ワールド">
-            <option value="jazz">ジャズ（4ビート）</option>
-            <option value="bossa">ボサノバ</option>
-            <option value="reggae">レゲエ（ワンドロップ）</option>
+          <optgroup label="Jazz &amp; world">
+            <option value="jazz">Jazz swing</option>
+            <option value="bossa">Bossa nova</option>
+            <option value="reggae">One-drop reggae</option>
           </optgroup>
         </select>
       </div>
     </section>
 
     <section class="actions">
-      <button type="button" id="roll" class="btn primary big">ランダムに提案</button>
-      <button type="button" id="play" class="btn big" aria-pressed="false">▶ 再生</button>
+      <button type="button" id="roll" class="btn primary" aria-label="Roll progression" title="Roll progression (R or Enter)">🎲</button>
+      <button type="button" id="play" class="btn" aria-label="Play" title="Play (Space)">▶</button>
     </section>
 
     <section class="result" aria-live="polite">
@@ -100,58 +99,59 @@
     </section>
 
     <details class="panel options">
-      <summary>提案の条件</summary>
+      <summary>Options</summary>
       <div class="field">
-        <span class="label">コードの響き</span>
-        <div class="seg" id="color" role="group" aria-label="コードの響き">
-          <button type="button" data-v="triad">3和音</button>
-          <button type="button" data-v="seventh">7th</button>
-          <button type="button" data-v="mix">ミックス</button>
-          <button type="button" data-v="rich">テンション多め</button>
+        <span class="label">Chords</span>
+        <div class="seg" id="color" role="group" aria-label="Chord types">
+          <button type="button" data-v="triad">Triads</button>
+          <button type="button" data-v="seventh">7ths</button>
+          <button type="button" data-v="mix">Mix</button>
+          <button type="button" data-v="rich">Extended</button>
         </div>
       </div>
       <div class="field">
-        <span class="label">ノンダイアトニック</span>
-        <div class="seg" id="outside" role="group" aria-label="ノンダイアトニックの頻度">
-          <button type="button" data-v="0">なし</button>
-          <button type="button" data-v="0.2">ときどき</button>
-          <button type="button" data-v="0.45">多め</button>
+        <span class="label">Outside key</span>
+        <div class="seg" id="outside" role="group" aria-label="Out-of-key chords">
+          <button type="button" data-v="0">Off</button>
+          <button type="button" data-v="0.2">Some</button>
+          <button type="button" data-v="0.45">More</button>
         </div>
       </div>
       <div class="field">
-        <label class="check"><input type="checkbox" id="startTonic"> 1小節目はトニック（I／Im）から</label>
-        <label class="check"><input type="checkbox" id="randomKey"> キーもランダムにする（メジャー／マイナーはそのまま）</label>
+        <label class="check"><input type="checkbox" id="startTonic"> Start on tonic</label>
+        <label class="check"><input type="checkbox" id="randomKey"> Random key</label>
       </div>
       <div class="field">
-        <span class="label">マイナーの度数表記</span>
-        <div class="seg" id="minorRef" role="group" aria-label="マイナーキーの度数表記">
-          <button type="button" data-v="tonic">主音基準（Im, ♭VI）</button>
-          <button type="button" data-v="relative">平行調基準（VIm, IV）</button>
+        <span class="label">Minor degrees</span>
+        <div class="seg" id="minorRef" role="group" aria-label="Minor degrees">
+          <button type="button" data-v="tonic">Tonic (Im)</button>
+          <button type="button" data-v="relative">Relative (VIm)</button>
         </div>
       </div>
     </details>
 
     <details class="panel options">
-      <summary>このキーのダイアトニックコード</summary>
-      <div id="diatonic" class="chips" title="クリックで試聴"></div>
+      <summary>Diatonic chords</summary>
+      <div id="diatonic" class="chips" title="Preview chord"></div>
     </details>
 
-    <section class="panel">
-      <div class="history-head">
-        <h2>履歴</h2>
-        <div class="seg small" id="historyFilter" role="group" aria-label="履歴の表示">
-          <button type="button" data-v="all">すべて</button>
-          <button type="button" data-v="fav">★ お気に入り</button>
-        </div>
+    <details class="panel options">
+      <summary>History</summary>
+      <div class="seg small" id="historyFilter" role="group" aria-label="History filter">
+        <button type="button" data-v="all">All</button>
+        <button type="button" data-v="fav" aria-label="Favorites" title="Favorites">★</button>
       </div>
       <ol id="history" class="history"></ol>
-      <button type="button" id="clearHistory" class="btn ghost small">履歴を消す（表示中とお気に入りは残す）</button>
-    </section>
+      <button type="button" id="clearHistory" class="btn ghost small" title="Keep current and favorites">Clear history</button>
+    </details>
   </main>
 
   <footer class="site-footer">
-    <p>ショートカット: <kbd>Space</kbd> 再生／停止、<kbd>Enter</kbd> または <kbd>R</kbd> ランダムに提案、<kbd>1</kbd>〜<kbd>8</kbd> その小節を固定</p>
-    <p>コード選びの考え方は <a href="https://github.com/liotier/AkaiMPC" target="_blank" rel="noopener">liotier/AkaiMPC</a>（Unlicense）を参考にしました。</p>
+    <details>
+      <summary>Shortcuts</summary>
+      <p><kbd>Space</kbd> Play / Stop · <kbd>Enter</kbd> / <kbd>R</kbd> Roll · <kbd>1</kbd>–<kbd>8</kbd> Lock bar</p>
+    </details>
+    <p>Inspired by <a href="https://github.com/liotier/AkaiMPC" target="_blank" rel="noopener">liotier/AkaiMPC</a> (Unlicense)</p>
   </footer>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>

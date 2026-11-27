@@ -26,8 +26,8 @@ test('キーに合わせてコード名を書く', () => {
   assert.equal(T.chordName(1, 'major', chord('major', 'bVI', 'maj')), 'A');
   assert.equal(T.chordName(6, 'major', chord('major', 'VIIm7b5', 'm7b5')), 'Fm7(♭5)');
   assert.equal(T.chordName(3, 'minor', chord('minor', 'V', 'dom7')), 'B♭7');
-  assert.equal(T.keyLabel(1, 'major'), 'D♭ メジャー');
-  assert.equal(T.keyLabel(1, 'minor'), 'C♯ マイナー');
+  assert.equal(T.keyLabel(1, 'major'), 'D♭ major');
+  assert.equal(T.keyLabel(1, 'minor'), 'C♯ minor');
 });
 
 test('構成音を音名で返す', () => {
@@ -48,7 +48,7 @@ test('度数表記（マイナーは主音基準と平行調基準）', () => {
 });
 
 test('セカンダリードミナントには解決先を添える', () => {
-  assert.equal(T.tagLabel(chord('major', 'III7', 'dom7'), 'major'), 'セカンダリードミナント（→ VIm）');
+  assert.equal(T.tagLabel(chord('major', 'III7', 'dom7'), 'major'), 'Secondary dominant → VIm');
 });
 
 test('ランダム提案: 4小節・固定は維持・隣り合う小節で同じルートが続かない', () => {
@@ -136,7 +136,7 @@ test('キーをまたいで復元したコードは、名前・音を保ち、�
   const restored = T.rebaseChord(chord('major', 'I', 'maj'), 0, 6, 'major');
   assert.equal(T.chordName(6, 'major', restored), 'C');
   assert.equal(T.romanName(restored, 'major'), '♭V');
-  assert.equal(T.tagLabel(restored, 'major'), '保持したコード');
+  assert.equal(T.tagLabel(restored, 'major'), 'Retained');
   const borrowed = T.rebaseChord(chord('major', 'I', 'maj'), 0, 2, 'major');
   assert.deepEqual(borrowed, chord('major', 'bVII', 'maj'));
 

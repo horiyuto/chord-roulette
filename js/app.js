@@ -246,12 +246,12 @@
         <div class="bar-head">
           <span class="bar-no">${n}</span>
           <span class="tools">
-            <button type="button" class="icon undo" title="前のコードに戻す" aria-label="${n}小節目を前のコードに戻す"${canUndo ? '' : ' disabled'}>↶</button>
-            <button type="button" class="icon reroll" title="このコードだけ変える" aria-label="${n}小節目のコードだけ変える">🎲</button>
-            <button type="button" class="icon lock" aria-pressed="${state.locks[i]}" title="${state.locks[i] ? '固定を外す' : '固定する'}（キー ${n}）" aria-label="${n}小節目を固定">${state.locks[i] ? '🔒' : '🔓'}</button>
+            <button type="button" class="icon undo" title="Undo bar ${n}" aria-label="Undo bar ${n}"${canUndo ? '' : ' disabled'}>↶</button>
+            <button type="button" class="icon reroll" title="Reroll bar ${n}" aria-label="Reroll bar ${n}">🎲</button>
+            <button type="button" class="icon lock" aria-pressed="${state.locks[i]}" title="${state.locks[i] ? 'Unlock' : 'Lock'} bar (${n})" aria-label="Lock bar ${n}">${state.locks[i] ? '🔒' : '🔓'}</button>
           </span>
         </div>
-        <button type="button" class="chord" title="クリックで試聴">
+        <button type="button" class="chord" title="Preview chord">
           <span class="name">${ns[i]}</span>
           <span class="roman">${rs[i]}</span>
         </button>
@@ -294,9 +294,9 @@
       const nm = chords.map((c) => T.chordName(h.keyPc, h.mode, c)).join(' → ');
       const rm = chords.map((c) => T.romanName(c, h.mode, state.minorRef)).join(' → ');
       li.innerHTML = `
-        <button type="button" class="star" aria-pressed="${!!h.fav}" title="お気に入り">${h.fav ? '★' : '☆'}</button>
-        <button type="button" class="load" title="この進行を呼び出す">
-          <span class="h-key">${h === current ? '表示中 · ' : ''}${T.keyLabel(h.keyPc, h.mode)}</span>
+        <button type="button" class="star" aria-pressed="${!!h.fav}" aria-label="Favorite: ${nm}" title="${h.fav ? 'Remove from favorites' : 'Add to favorites'}">${h.fav ? '★' : '☆'}</button>
+        <button type="button" class="load" title="Load progression">
+          <span class="h-key">${h === current ? 'Now · ' : ''}${T.keyLabel(h.keyPc, h.mode)}</span>
           <span class="h-names">${nm}</span>
           <span class="h-romans">${rm}</span>
         </button>
@@ -350,9 +350,12 @@
     } else {
       A.Player.start(playState, highlight);
     }
-    const playing = A.Player.playing;
-    $('play').textContent = playing ? '■ 停止' : '▶ 再生';
-    $('play').setAttribute('aria-pressed', String(playing));
+    const play = $('play');
+    const action = A.Player.playing ? 'Stop' : 'Play';
+    play.textContent = A.Player.playing ? '■' : '▶';
+    play.setAttribute('aria-label', action);
+    play.title = `${action} (Space)`;
+    play.classList.toggle('playing', A.Player.playing);
   }
 
   let toastTimer = null;
@@ -391,7 +394,7 @@
       if (v === state.mode) return;
       state.mode = v;
       newProgression();
-      toast(`${T.keyLabel(state.keyPc, state.mode)} で新しく提案しました`);
+      toast(`New loop: ${T.keyLabel(state.keyPc, state.mode)}`);
     });
     bindSeg('barCount', (v) => {
       const bars = Number(v);

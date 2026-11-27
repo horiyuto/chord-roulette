@@ -32,14 +32,14 @@
   };
 
   const TAGS = {
-    diatonic: 'ダイアトニック',
-    harmonic: 'ハーモニックマイナー',
-    secdom: 'セカンダリードミナント',
-    borrowed: '同主調から借用',
-    dorian: 'ドリアン由来',
-    neapolitan: 'ナポリの和音',
-    passing: '経過和音',
-    restored: '保持したコード',
+    diatonic: 'Diatonic',
+    harmonic: 'Harmonic minor',
+    secdom: 'Secondary dominant',
+    borrowed: 'Borrowed',
+    dorian: 'Dorian',
+    neapolitan: 'Neapolitan',
+    passing: 'Passing',
+    restored: 'Retained',
   };
 
   // deg: 主音から数えた音名の位置（0〜6）、semi: 主音からの半音数
@@ -96,7 +96,7 @@
     minor: [[0, 0], [0, 1], [1, 0], [2, -1], [2, 0], [3, 0], [3, 1], [4, 0], [4, 1], [5, 0], [6, -1], [6, 0]],
   };
 
-  const MODE_LABEL = { major: 'メジャー', minor: 'マイナー' };
+  const MODE_LABEL = { major: 'major', minor: 'minor' };
 
   function noteName(letter, acc) {
     return LETTERS[letter] + (ACC[acc] || '');
@@ -181,7 +181,7 @@
     if (!chord.target) return base;
     const t = findEntry(mode, chord.target);
     if (!t) return base;
-    return `${base}（→ ${romanStem(t.deg, t.semi, mode, minorRef)}${QUALITIES[t.tri[0]].suffix}）`;
+    return `${base} → ${romanStem(t.deg, t.semi, mode, minorRef)}${QUALITIES[t.tri[0]].suffix}`;
   }
 
   function weightedPick(list, rng) {
