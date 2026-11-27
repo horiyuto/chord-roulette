@@ -9,7 +9,8 @@ const T = require('../js/theory.js');
 function element() {
   const selectors = new Map();
   return {
-    children: [], dataset: {}, classList: { add() {} },
+    children: [], dataset: {}, classList: { add() {}, toggle() {} },
+    setAttribute(name, value) { this[name] = value; },
     set innerHTML(html) { this.html = html; this.children = []; selectors.clear(); },
     appendChild(child) { this.children.push(child); },
     querySelectorAll() { return []; },
@@ -31,7 +32,10 @@ function openApp(hash, entries, { random = Math.random } = {}) {
   const previews = [];
   const window = Object.assign(element(), {
     ChordTheory: T,
-    ChordAudio: { preview: (notes, bass) => previews.push({ notes, bass }) },
+    ChordAudio: {
+      preview: (notes, bass) => previews.push({ notes, bass }),
+      Player: { playing: false, start() { this.playing = true; }, stop() { this.playing = false; } },
+    },
     history: { replaceState(_state, _title, url) { location.hash = url; } },
   });
   const document = Object.assign(element(), {
@@ -52,6 +56,17 @@ function openApp(hash, entries, { random = Math.random } = {}) {
     },
   };
 }
+
+test('playback button keeps its symbol, tooltip and accessible action in sync', () => {
+  const app = openApp('#m=major&k=0&c=I.maj_IV.maj&t=90&b=2', []);
+  const play = app.node('play');
+  for (const [symbol, action] of [['■', 'Stop'], ['▶', 'Play']]) {
+    play.click();
+    assert.equal(play.textContent, symbol);
+    assert.equal(play['aria-label'], action);
+    assert.equal(play.title, `${action} (Space)`);
+  }
+});
 
 test('共有URL・移調・1小節の再提案を履歴からお気に入りにできる', () => {
   const code = 'I.maj_IV.maj_V.dom7_IIm.m';
