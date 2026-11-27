@@ -94,22 +94,28 @@
     undo = state.chords.map(() => []);
   }
 
+  function snapshot() {
+    return { keyPc: state.keyPc, chords: state.chords };
+  }
+
   function pushUndo(before) {
     state.chords.forEach((c, i) => {
-      if (!before[i] || T.encodeChords([c]) === T.encodeChords([before[i]])) return;
-      undo[i] = (undo[i] || []).concat([before[i]]).slice(-UNDO_MAX);
+      const chord = before.chords[i];
+      if (!chord || T.chordName(state.keyPc, state.mode, c) === T.chordName(before.keyPc, state.mode, chord)) return;
+      undo[i] = (undo[i] || []).concat([{ keyPc: before.keyPc, chord }]).slice(-UNDO_MAX);
     });
   }
 
   function undoOne(i) {
     if (!undo[i] || !undo[i].length) return;
+    const previous = undo[i].pop();
     state.chords = state.chords.slice();
-    state.chords[i] = undo[i].pop();
+    state.chords[i] = T.rebaseChord(previous.chord, previous.keyPc, state.keyPc, state.mode);
     render(false, i);
   }
 
   function roll() {
-    const before = state.chords;
+    const before = snapshot();
     randomizeKey();
     state.chords = T.generate(options(), state.chords, state.locks);
     pushUndo(before);
@@ -125,12 +131,19 @@
   }
 
   function randomizeKey() {
-    if (state.randomKey) state.keyPc = Math.floor(Math.random() * 12);
+    if (state.randomKey) setKey(Math.floor(Math.random() * 12));
+  }
+
+  function setKey(keyPc) {
+    state.chords = state.chords.map((chord, i) => state.locks[i]
+      ? T.rebaseChord(chord, state.keyPc, keyPc, state.mode)
+      : chord);
+    state.keyPc = keyPc;
   }
 
   function rerollOne(i) {
     const locks = state.locks.map((_, j) => j !== i);
-    const before = state.chords;
+    const before = snapshot();
     state.chords = T.generate(options({ startTonic: false, avoid: { [i]: state.chords[i] } }), state.chords, locks);
     pushUndo(before);
     render(false, i);
@@ -369,7 +382,9 @@
     $('play').addEventListener('click', togglePlay);
 
     $('key').addEventListener('change', (e) => {
-      state.keyPc = Number(e.target.value);
+      const before = snapshot();
+      setKey(Number(e.target.value));
+      pushUndo(before);
       render(false, null);
     });
     bindSeg('mode', (v) => {
