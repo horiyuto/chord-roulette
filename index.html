@@ -113,6 +113,14 @@
     <details class="panel options">
       <summary>Options</summary>
       <div class="field">
+        <span class="label">Feel</span>
+        <div class="seg" id="feel" role="group" aria-label="Progression feel">
+          <button type="button" data-v="smooth" title="Mostly familiar progressions">Smooth</button>
+          <button type="button" data-v="balanced" title="Natural flow with some surprises">Balanced</button>
+          <button type="button" data-v="random" title="Any chord, almost anywhere">Random</button>
+        </div>
+      </div>
+      <div class="field">
         <span class="label">Chords</span>
         <div class="seg" id="color" role="group" aria-label="Chord types">
           <button type="button" data-v="triad">Triads</button>
@@ -168,8 +176,8 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script src="js/theory.js"></script>
+  <script src="js/theory.js?v=feel"></script>
   <script src="js/audio.js"></script>
-  <script src="js/app.js?v=touch-pickers"></script>
+  <script src="js/app.js?v=feel"></script>
 </body>
 </html>

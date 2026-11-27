@@ -51,56 +51,126 @@ test('セカンダリードミナントには解決先を添える', () => {
   assert.equal(T.tagLabel(chord('major', 'III7', 'dom7'), 'major'), 'Secondary dominant → VIm');
 });
 
+// 同じルートが続くのは IV→IVm・I→I7 のような定番の組み合わせだけ
+function assertLoopFlows(mode, chords) {
+  chords.forEach((a, i) => {
+    const b = chords[(i + 1) % chords.length];
+    assert.ok(a.semi !== b.semi || (a.id !== b.id && T.flow(mode, a, b) > 0), `${mode} ${T.encodeChords(chords)}`);
+  });
+}
+
 test('ランダム提案: 4小節・固定は維持・隣り合う小節で同じルートが続かない', () => {
-  for (const mode of ['major', 'minor']) {
-    for (const color of ['triad', 'seventh', 'mix', 'rich']) {
-      for (let seed = 1; seed <= 150; seed++) {
-        const rng = seeded(seed * 31 + color.length);
-        const first = T.generate({ mode, color, outside: 0.45 }, null, null, rng);
-        assert.equal(first.length, 4);
-        first.forEach((c) => assert.ok(T.QUALITIES[c.q], `${c.id}.${c.q}`));
-        for (let i = 0; i < 4; i++) {
-          assert.notEqual(first[i].semi, first[(i + 1) % 4].semi, `${mode} ${T.encodeChords(first)}`);
+  for (const feel of ['smooth', 'balanced', 'random']) {
+    for (const mode of ['major', 'minor']) {
+      for (const color of ['triad', 'seventh', 'mix', 'rich']) {
+        for (let seed = 1; seed <= 150; seed++) {
+          const rng = seeded(seed * 31 + color.length);
+          const first = T.generate({ mode, color, outside: 0.45, feel }, null, null, rng);
+          assert.equal(first.length, 4);
+          first.forEach((c) => assert.ok(T.QUALITIES[c.q], `${c.id}.${c.q}`));
+          assertLoopFlows(mode, first);
+          const locks = [true, false, true, false];
+          const next = T.generate({ mode, color, outside: 0.45, feel }, first, locks, rng);
+          assert.equal(next[0], first[0]);
+          assert.equal(next[2], first[2]);
+          assertLoopFlows(mode, next);
         }
-        const locks = [true, false, true, false];
-        const next = T.generate({ mode, color, outside: 0.45 }, first, locks, rng);
-        assert.equal(next[0], first[0]);
-        assert.equal(next[2], first[2]);
       }
     }
   }
 });
 
+const FEELS = ['smooth', 'balanced', 'random'];
+
 test('ノンダイアトニック「なし」ならダイアトニックだけ', () => {
-  for (let seed = 1; seed <= 200; seed++) {
-    const p = T.generate({ mode: seed % 2 ? 'major' : 'minor', outside: 0 }, null, null, seeded(seed));
-    p.forEach((c) => assert.ok(['diatonic', 'harmonic'].includes(c.tag), c.id));
+  for (const feel of FEELS) {
+    for (let seed = 1; seed <= 200; seed++) {
+      const p = T.generate({ mode: seed % 2 ? 'major' : 'minor', outside: 0, bars: [2, 4, 8][seed % 3], feel }, null, null, seeded(seed));
+      p.forEach((c) => assert.ok(['diatonic', 'harmonic'].includes(c.tag), c.id));
+    }
   }
 });
 
 test('1小節目をトニックから始められる', () => {
-  for (let seed = 1; seed <= 100; seed++) {
-    const p = T.generate({ mode: 'major', startTonic: true, outside: 0.2 }, null, null, seeded(seed));
-    assert.equal(p[0].id, 'I');
+  for (const feel of FEELS) {
+    for (let seed = 1; seed <= 100; seed++) {
+      const mode = seed % 2 ? 'major' : 'minor';
+      const p = T.generate({ mode, startTonic: true, outside: 0.2, bars: [2, 4, 8][seed % 3], feel }, null, null, seeded(seed));
+      assert.equal(p[0].id, mode === 'major' ? 'I' : 'Im');
+    }
   }
 });
 
 test('2・4・8小節の進行を生成し、ループ境界でも同じルートを避ける', () => {
   for (const bars of [2, 4, 8]) {
-    const progression = T.generate({ mode: 'major', bars, outside: 0.2 }, null, null, seeded(bars));
-    assert.equal(progression.length, bars);
-    progression.forEach((c, i) => assert.notEqual(c.semi, progression[(i + 1) % bars].semi));
+    for (let seed = 1; seed <= 100; seed++) {
+      const progression = T.generate({ mode: seed % 2 ? 'major' : 'minor', bars, outside: 0.2 }, null, null, seeded(seed * bars));
+      assert.equal(progression.length, bars);
+      assertLoopFlows(seed % 2 ? 'major' : 'minor', progression);
+    }
   }
 });
 
 test('1小節だけ変えると、そのコードは別のものになる', () => {
-  for (let seed = 1; seed <= 200; seed++) {
-    const rng = seeded(seed);
-    const p = T.generate({ mode: 'major', color: 'triad', outside: 0 }, null, null, rng);
-    const q = T.generate({ mode: 'major', color: 'triad', outside: 0, avoid: { 1: p[1] } }, p, [true, false, true, true], rng);
-    assert.ok(q[1].id !== p[1].id || q[1].q !== p[1].q);
-    assert.equal(q[0], p[0]);
+  for (const feel of FEELS) {
+    for (let seed = 1; seed <= 200; seed++) {
+      const rng = seeded(seed);
+      const p = T.generate({ mode: 'major', color: 'triad', outside: 0, feel }, null, null, rng);
+      const q = T.generate({ mode: 'major', color: 'triad', outside: 0, avoid: { 1: p[1] }, feel }, p, [true, false, true, true], rng);
+      assert.ok(q[1].id !== p[1].id || q[1].q !== p[1].q);
+      assert.equal(q[0], p[0]);
+    }
   }
+});
+
+test('定番の進行は、ループしても自然につながる', () => {
+  for (const mode of ['major', 'minor']) {
+    for (const { ids } of T.TEMPLATES[mode]) {
+      assert.ok([2, 4, 8].includes(ids.length), ids.join(' '));
+      const chords = ids.map((id) => T.findEntry(mode, id));
+      assert.ok(chords.every(Boolean), ids.join(' '));
+      assertLoopFlows(mode, chords);
+    }
+  }
+});
+
+// 進行全体のつながりの自然さ（ループの継ぎ目も含む）
+function flowScore(mode, chords) {
+  return chords.reduce((s, a, i) => s + Math.log(T.flow(mode, a, chords[(i + 1) % chords.length])), 0) / chords.length;
+}
+
+test('流れ重視ほど、自然なつながりと定番の進行が出やすい', () => {
+  const famous = new Set(T.TEMPLATES.major.filter((t) => t.ids.length === 4).flatMap(({ ids }) =>
+    ids.map((_, r) => ids.map((__, i) => ids[(i + r) % 4]).join(' '))));
+  const stats = {};
+  for (const feel of FEELS) {
+    let score = 0;
+    let hits = 0;
+    for (let seed = 1; seed <= 400; seed++) {
+      const p = T.generate({ mode: 'major', outside: 0.2, feel }, null, null, seeded(seed));
+      score += flowScore('major', p) / 400;
+      if (famous.has(p.map((c) => c.id).join(' '))) hits++;
+    }
+    stats[feel] = { score, hits };
+  }
+  assert.ok(stats.smooth.score > stats.balanced.score && stats.balanced.score > stats.random.score, JSON.stringify(stats));
+  assert.ok(stats.smooth.hits > stats.balanced.hits && stats.balanced.hits > stats.random.hits * 3, JSON.stringify(stats));
+  assert.ok(stats.balanced.hits < 300, '全部が定番にはならない');
+});
+
+test('1小節だけ変えるときは、前後の小節につながるコードが出やすい', () => {
+  // IIm _ I VIm の2小節目は V が自然
+  const fixed = ['IIm', 'IIIm', 'I', 'VIm'].map((id) => chord('major', id, T.findEntry('major', id).tri[0]));
+  const share = (feel) => {
+    let v = 0;
+    for (let seed = 1; seed <= 300; seed++) {
+      const q = T.generate({ mode: 'major', outside: 0, avoid: { 1: fixed[1] }, feel }, fixed, [true, false, true, true], seeded(seed));
+      if (q[1].id === 'V') v++;
+    }
+    return v / 300;
+  };
+  assert.ok(share('smooth') > 0.7, String(share('smooth')));
+  assert.ok(share('random') < 0.4, String(share('random')));
 });
 
 test('ボイシングは決めた音域に収まる', () => {

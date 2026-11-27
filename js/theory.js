@@ -234,12 +234,212 @@
     return entry ? makeChord(entry, chord.q) : chordFromId(mode, `r${deg}-${semi}`, chord.q);
   }
 
+  // ---- 進行の流れ（耳になじむつながりを出やすくする） ----
+  // T: トニック、S: サブドミナント、D: ドミナント
+  const FUNCTION = {
+    major: { I: 'T', IIIm: 'T', VIm: 'T', IIm: 'S', IV: 'S', IVm: 'S', bVI: 'S', bVII: 'S', IIm7b5: 'S', bII: 'S', V: 'D', VIIm7b5: 'D' },
+    minor: { Im: 'T', bIII: 'T', bVI: 'S', IVm: 'S', IIm7b5: 'S', IV: 'S', IIm: 'S', bII: 'S', V: 'D', Vm: 'D', bVII: 'D', VIIdim7: 'D' },
+  };
+  // ルートが上に何半音動くか。5（4度上＝5度下）が最も強い
+  const MOTION = [0, 1, 1.6, 1, 0.9, 2.6, 0.25, 1.5, 1.6, 1.7, 1.3, 1.1];
+  const FUNCTION_MOVE = { DT: 1.8, SD: 1.5, TS: 1.2, DS: 0.7 };
+  // 同じルートでも続けてよい組み合わせ
+  const SAME_ROOT = { major: { 'IV>IVm': 2, 'I>I7': 1.5 }, minor: { 'Im>I7': 1.5 } };
+  const FAVORITE_MOVE = {
+    major: { 'IVm>I': 1.5, 'bVI>bVII': 1.5, 'bVII>I': 1.5, 'bII>V': 8 },
+    minor: { 'bVII>bVI': 1.8, 'bVI>V': 1.3, 'bII>V': 8 },
+  };
+  const START = { major: { I: 2, IV: 1.5, VIm: 1.4, IIm: 1.2 }, minor: { Im: 2, bVI: 1.5, IVm: 1.3 } };
+
+  /** a の次に b が来るときの自然さ。0 は続けない */
+  function flow(mode, a, b) {
+    const pair = `${a.id}>${b.id}`;
+    if (a.semi === b.semi) return SAME_ROOT[mode][pair] || 0;
+    if (a.target) {
+      const t = findEntry(mode, a.target);
+      return t && t.semi === b.semi ? 8 : 0.25;
+    }
+    const fa = FUNCTION[mode][a.id];
+    const fb = FUNCTION[mode][b.id];
+    let w = MOTION[mod(b.semi - a.semi, 12)];
+    if (fa && fb) w *= fa === fb ? 0.9 : FUNCTION_MOVE[fa + fb] || 1;
+    return w * (FAVORITE_MOVE[mode][pair] || 1);
+  }
+
+  // よく使われる進行（ループとして回しても自然なもの）。w: 出やすさ
+  const P = (ids, w) => ({ ids: ids.split(' '), w });
+  const TEMPLATES = {
+    major: [
+      P('IV V IIIm VIm', 3), // 王道進行
+      P('VIm IV V I', 3), // 小室進行
+      P('I V VIm IV', 3),
+      P('I VIm IV V', 2),
+      P('IIm V I VIm', 2),
+      P('IV I V VIm', 2),
+      P('I IV I V', 1.5),
+      P('VIm IIm V I', 1.5),
+      P('IIIm VIm IIm V', 1),
+      P('I IIIm IV V', 1),
+      P('IV V III7 VIm', 2),
+      P('IV III7 VIm I7', 2), // 丸サ進行に近い形
+      P('IV IVm IIIm VIm', 2),
+      P('I I7 IV IVm', 1.5),
+      P('I VI7 IIm V', 1.5),
+      P('I V VIm IIIm IV I IV V', 3), // カノン進行
+      P('I IV', 2), P('IV V', 2), P('IIm V', 2), P('VIm IV', 1), P('IV IIIm', 1),
+    ],
+    minor: [
+      P('Im bVI bIII bVII', 3),
+      P('Im bVII bVI V', 3), // アンダルシア進行
+      P('bVI bVII Vm Im', 3), // 平行調から見た王道進行
+      P('Im bVI bVII bIII', 2), // 平行調から見た小室進行
+      P('Im IVm bVII bIII', 2),
+      P('Im bVII bVI bVII', 2),
+      P('Im IVm bVI V', 1.5),
+      P('IIm7b5 V Im IVm', 1),
+      P('IVm bVII bIII bVI IIm7b5 V Im I7', 2),
+      P('Im bVII', 2), P('Im IVm', 2), P('bVI bVII', 2), P('IIm7b5 V', 1), P('Im IV', 1),
+    ],
+  };
+
+  // smooth: 流れ重視 ／ balanced: ときどき自由な組み合わせ ／ random: 従来どおり
+  const FEELS = {
+    smooth: { free: 0, template: 0.5, vary: 0.04 },
+    balanced: { free: 0.15, template: 0.35, vary: 0.08 },
+    random: { free: 1, template: 0, vary: 0 },
+  };
+
+  function context(options, current, locks, rng) {
+    const { mode, color = 'mix', startTonic = false, bars = 4, avoid = {} } = options;
+    const outside = Math.min(Math.max(Number(options.outside == null ? 0.2 : options.outside) || 0, 0), 0.9);
+    const pool = POOLS[mode];
+    const inKey = pool.filter((x) => x.diatonic);
+    const others = outside > 0 ? pool.filter((x) => !x.diatonic) : [];
+    const total = (list) => list.reduce((s, x) => s + x.w, 0);
+    // 調の外のコードが、全体のおよそ outside の割合で出るよう重みをそろえる
+    const outScale = others.length ? (outside / (1 - outside)) * (total(inKey) / total(others)) : 0;
+    return {
+      mode, color, outside, startTonic, bars, avoid, rng,
+      tonic: findEntry(mode, mode === 'major' ? 'I' : 'Im'),
+      entries: inKey.concat(others),
+      prior: (x) => (x.diatonic ? x.w : x.w * outScale),
+      fixed: (i) => (locks && locks[i] && current && current[i] ? current[i] : null),
+    };
+  }
+
+  // 前後のコードに自然につながるものを選ぶ（skipId と避けたいコードは除く）
+  function pickBetween(ctx, i, prev, next, skipId) {
+    const avoidId = ctx.avoid[i] && ctx.avoid[i].id;
+    const choices = [];
+    for (const x of ctx.entries) {
+      if (x.id === avoidId || x.id === skipId) continue;
+      let w = ctx.prior(x);
+      if (prev) w *= flow(ctx.mode, prev, x);
+      else if (i === 0) w *= START[ctx.mode][x.id] || 1;
+      if (next) w *= flow(ctx.mode, x, next);
+      if (w > 0) choices.push({ entry: x, w });
+    }
+    return choices.length ? weightedPick(choices, ctx.rng).entry : null;
+  }
+
+  function neighbors(ctx, out, i) {
+    const last = ctx.bars - 1;
+    const prev = i > 0 ? out[i - 1] : ctx.fixed(last);
+    const next = i < last ? ctx.fixed(i + 1) || out[i + 1] : (i > 0 ? out[0] : null);
+    return [prev || null, next || null];
+  }
+
+  function chordFor(ctx, entry) {
+    return makeChord(entry, pickQuality(entry, ctx.color, ctx.rng));
+  }
+
+  function tonicFits(ctx, i, prev, next) {
+    const t = ctx.tonic;
+    return i === 0 && ctx.startTonic && !(ctx.avoid[0] && ctx.avoid[0].id === t.id)
+      && (!prev || flow(ctx.mode, prev, t) > 0) && (!next || flow(ctx.mode, t, next) > 0);
+  }
+
+  // 1小節ずつ、前のコード（最後の小節は1小節目も）からの流れで選ぶ
+  function fillByFlow(ctx) {
+    const out = [];
+    for (let i = 0; i < ctx.bars; i++) {
+      const fixed = ctx.fixed(i);
+      if (fixed) {
+        out[i] = fixed;
+        continue;
+      }
+      const [prev, next] = neighbors(ctx, out, i);
+      const entry = tonicFits(ctx, i, prev, next) ? ctx.tonic : pickBetween(ctx, i, prev, next);
+      if (!entry) return null;
+      out[i] = chordFor(ctx, entry);
+    }
+    return out;
+  }
+
+  // 定番の進行（回転・8小節への繰り返しを含む）から、固定した小節と矛盾しないものを選ぶ
+  function pickTemplate(ctx) {
+    const { mode, bars } = ctx;
+    const candidates = [];
+    for (const template of TEMPLATES[mode]) {
+      const entries = template.ids.map((id) => findEntry(mode, id));
+      const len = entries.length;
+      const outsideCount = entries.filter((x) => !x.diatonic).length;
+      if ((outsideCount && !ctx.outside) || bars % len || (len < bars && len < 4)) continue;
+      const w = template.w * (outsideCount ? ctx.outside / 0.2 : 1) * (len < bars ? 0.6 : 1);
+      for (let r = 0; r < len; r++) {
+        const seq = Array.from({ length: bars }, (_, i) => entries[(i + r) % len]);
+        if (templateFits(ctx, seq)) candidates.push({ seq, repeated: len < bars, w: r ? w * 0.2 : w });
+      }
+    }
+    return candidates.length ? weightedPick(candidates, ctx.rng) : null;
+  }
+
+  function templateFits(ctx, seq) {
+    const actual = seq.map((entry, i) => ctx.fixed(i) || entry);
+    for (let i = 0; i < seq.length; i++) {
+      const fixed = ctx.fixed(i);
+      if (fixed ? fixed.semi !== seq[i].semi : ctx.avoid[i] && ctx.avoid[i].id === seq[i].id) return false;
+      if (i === 0 && ctx.startTonic && !fixed && seq[0] !== ctx.tonic) return false;
+      if (!(flow(ctx.mode, actual[i], actual[(i + 1) % seq.length]) > 0)) return false;
+    }
+    return true;
+  }
+
+  function fromTemplate(ctx, picked, vary) {
+    const out = picked.seq.map((entry, i) => ctx.fixed(i) || chordFor(ctx, entry));
+    // ときどき1か所を、前後に合う別のコードへ差し替える（8小節の繰り返しは後半を多めに）
+    for (let i = 0; i < ctx.bars; i++) {
+      if (ctx.fixed(i) || (i === 0 && ctx.startTonic)) continue;
+      const chance = picked.repeated && i >= ctx.bars / 2 ? vary * 2.5 : vary;
+      if (ctx.rng() >= chance) continue;
+      const prev = out[(i + ctx.bars - 1) % ctx.bars];
+      const next = out[(i + 1) % ctx.bars];
+      const entry = pickBetween(ctx, i, prev, next, out[i].id);
+      if (entry) out[i] = chordFor(ctx, entry);
+    }
+    return out;
+  }
+
   /**
-   * options.bars 小節ぶんのコードをランダムに選ぶ。
+   * options.bars 小節ぶんのコードを選ぶ。
    * locks[i] が true の小節は current[i] をそのまま残す。
    * options.avoid: 小節番号 -> 避けたいコード（同じコードの再提案を防ぐ）
+   * options.feel: smooth / balanced（既定）/ random
+   *   定番の進行や自然なつながりを出やすくしつつ、balanced ではときどき自由な組み合わせも混ぜる。
    */
   function generate(options, current, locks, rng) {
+    rng = rng || Math.random;
+    const feel = FEELS[options.feel] || FEELS.balanced;
+    const roll = rng();
+    if (roll < feel.free) return generateFree(options, current, locks, rng);
+    const ctx = context(options, current, locks, rng);
+    const picked = roll < feel.free + feel.template ? pickTemplate(ctx) : null;
+    return (picked ? fromTemplate(ctx, picked, feel.vary) : fillByFlow(ctx))
+      || generateFree(options, current, locks, rng);
+  }
+
+  // 従来の選び方: 1小節ずつ、出やすさの重みだけでランダムに選ぶ
+  function generateFree(options, current, locks, rng) {
     const { mode, color = 'mix', outside = 0.2, startTonic = false, bars = 4, avoid = {} } = options;
     current = current || [];
     locks = locks || [];
@@ -369,7 +569,8 @@
   const api = {
     QUALITIES, POOLS, TAGS, MODE_LABEL, mod,
     tonicName, keyLabel, spellRoot, rootPc, chordName, romanName, romanStem, chordToneNames,
-    tagLabel, findEntry, chordFromId, rebaseChord, generate, diatonicChords,
+    TEMPLATES, FEELS,
+    tagLabel, findEntry, chordFromId, rebaseChord, flow, generate, diatonicChords,
     voiceChord, voiceProgression, bassNote, encodeChords, decodeChords,
   };
 
