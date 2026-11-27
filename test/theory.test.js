@@ -4,6 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const T = require('../js/theory.js');
 const M = require('../js/midi.js');
+const fs = require('node:fs');
+const vm = require('node:vm');
 
 function seeded(seed) {
   let s = seed >>> 0;
@@ -84,6 +86,14 @@ test('1小節目をトニックから始められる', () => {
   }
 });
 
+test('2・4・8小節の進行を生成し、ループ境界でも同じルートを避ける', () => {
+  for (const bars of [2, 4, 8]) {
+    const progression = T.generate({ mode: 'major', bars, outside: 0.2 }, null, null, seeded(bars));
+    assert.equal(progression.length, bars);
+    progression.forEach((c, i) => assert.notEqual(c.semi, progression[(i + 1) % bars].semi));
+  }
+});
+
 test('1小節だけ変えると、そのコードは別のものになる', () => {
   for (let seed = 1; seed <= 200; seed++) {
     const rng = seeded(seed);
@@ -137,6 +147,23 @@ test('MIDIファイルの形式', () => {
   assert.equal((data[tempoAt + 2] << 16) | (data[tempoAt + 3] << 8) | data[tempoAt + 4], usPerQuarter);
   const noteOns = data.filter((b, i) => b === 0x90 && i > 22).length;
   assert.equal(noteOns, 8);
+});
+
+test('ドラムのリズムパターンは小節内の指定拍に配置される', () => {
+  const window = {};
+  vm.runInNewContext(fs.readFileSync(require.resolve('../js/audio.js'), 'utf8'), { window });
+  const events = window.ChordAudio.drumEvents;
+  const summarize = (pattern, sound) => Array.from(events(pattern))
+    .filter((event) => event.sound === sound)
+    .map((event) => event.beat);
+
+  assert.deepEqual(summarize('none', 'kick'), []);
+  assert.deepEqual(summarize('eight', 'kick'), [0, 2]);
+  assert.deepEqual(summarize('eight', 'snare'), [1, 3]);
+  assert.deepEqual(summarize('four', 'kick'), [0, 1, 2, 3]);
+  assert.deepEqual(summarize('half', 'kick'), [0]);
+  assert.deepEqual(summarize('half', 'snare'), [2]);
+  assert.deepEqual(summarize('eight', 'hat'), [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5]);
 });
 
 test('ファイル名用に記号をASCIIへ置き換える', () => {

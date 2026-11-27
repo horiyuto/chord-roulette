@@ -155,6 +155,8 @@ button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-v
   margin-bottom: 16px;
 }
 
+.bars[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
 .bar {
   background: var(--panel);
   border: 1px solid var(--line);

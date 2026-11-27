@@ -5,7 +5,7 @@
   const T = window.ChordTheory;
   const M = window.ChordMidi;
   const A = window.ChordAudio;
-  const BARS = 4;
+  const BAR_COUNTS = [2, 4, 8];
   const STORE_SETTINGS = 'chord-roulette:settings';
   const STORE_HISTORY = 'chord-roulette:history';
   const HISTORY_MAX = 40;
@@ -17,18 +17,24 @@
     mode: 'major',
     bpm: 90,
     style: 'whole',
+    bars: 4,
+    rhythm: 'none',
     color: 'mix',
     outside: '0.2',
     startTonic: false,
-    randomKey: false,
+    randomKey: true,
+    settingsVersion: 2,
     minorRef: 'tonic',
     includeBass: true,
     historyFilter: 'all',
   };
 
-  const state = Object.assign({}, defaults, loadJson(STORE_SETTINGS, {}));
+  const storedSettings = loadJson(STORE_SETTINGS, {});
+  const state = Object.assign({}, defaults, storedSettings);
+  if ((storedSettings.settingsVersion || 1) < 2) state.randomKey = true;
   state.chords = [];
-  state.locks = [false, false, false, false];
+  state.bars = BAR_COUNTS.includes(Number(state.bars)) ? Number(state.bars) : 4;
+  state.locks = Array.from({ length: state.bars }, () => false);
   let saved = loadJson(STORE_HISTORY, []);
   if (!Array.isArray(saved)) saved = [];
 
@@ -79,15 +85,19 @@
       color: state.color,
       outside: Number(state.outside),
       startTonic: state.startTonic,
-      bars: BARS,
+      bars: state.bars,
     }, extra);
   }
 
   function roll() {
-    if (state.randomKey) state.keyPc = Math.floor(Math.random() * 12);
+    randomizeKey();
     state.chords = T.generate(options(), state.chords, state.locks);
     addHistory(false);
     render(true);
+  }
+
+  function randomizeKey() {
+    if (state.randomKey) state.keyPc = Math.floor(Math.random() * 12);
   }
 
   function rerollOne(i) {
@@ -98,11 +108,11 @@
 
   // ---- 履歴 ----
   function currentEntry() {
-    return { keyPc: state.keyPc, mode: state.mode, code: T.encodeChords(state.chords) };
+    return { keyPc: state.keyPc, mode: state.mode, bars: state.bars, code: T.encodeChords(state.chords) };
   }
 
   function sameEntry(a, b) {
-    return a.keyPc === b.keyPc && a.mode === b.mode && a.code === b.code;
+    return a.keyPc === b.keyPc && a.mode === b.mode && (a.bars || 4) === (b.bars || 4) && a.code === b.code;
   }
 
   function addHistory(fav) {
@@ -122,11 +132,12 @@
 
   function loadEntry(h) {
     const chords = T.decodeChords(h.mode, h.code);
-    if (!chords) return;
+    if (!chords || !BAR_COUNTS.includes(chords.length)) return;
     state.mode = h.mode;
     state.keyPc = h.keyPc;
+    state.bars = chords.length;
     state.chords = chords;
-    state.locks = [false, false, false, false];
+    state.locks = Array.from({ length: state.bars }, () => false);
     render(true);
   }
 
@@ -153,6 +164,8 @@
     renderKeySelect();
     renderSeg('mode', state.mode);
     renderSeg('style', state.style);
+    renderSeg('barCount', String(state.bars));
+    renderSeg('rhythm', state.rhythm);
     renderSeg('color', state.color);
     renderSeg('outside', state.outside);
     renderSeg('minorRef', state.minorRef);
@@ -188,6 +201,7 @@
 
   function renderBars(changedIndex) {
     const box = $('bars');
+    box.dataset.count = String(state.chords.length);
     const ns = names(state.chords);
     const rs = romans(state.chords);
     const vs = voicings();
@@ -280,6 +294,7 @@
       k: String(state.keyPc),
       c: T.encodeChords(state.chords),
       t: String(state.bpm),
+      b: String(state.bars),
     });
     window.history.replaceState(null, '', `#${p.toString()}`);
   }
@@ -297,7 +312,7 @@
 
   // ---- 再生 ----
   function playState() {
-    return { bpm: state.bpm, style: state.style, voicings: voicings(), bass: basses() };
+    return { bpm: state.bpm, style: state.style, rhythm: state.rhythm, voicings: voicings(), bass: basses() };
   }
 
   function highlight(i) {
@@ -401,11 +416,22 @@
     bindSeg('mode', (v) => {
       if (v === state.mode) return;
       state.mode = v;
-      state.locks = [false, false, false, false];
+      state.locks = Array.from({ length: state.bars }, () => false);
+      randomizeKey();
       state.chords = T.generate(options(), [], []);
       addHistory(false);
       render(true);
       toast(`${T.keyLabel(state.keyPc, state.mode)} で新しく提案しました`);
+    });
+    bindSeg('barCount', (v) => {
+      const bars = Number(v);
+      if (!BAR_COUNTS.includes(bars) || bars === state.bars) return;
+      state.bars = bars;
+      state.locks = Array.from({ length: bars }, () => false);
+      randomizeKey();
+      state.chords = T.generate(options(), [], []);
+      addHistory(false);
+      render(true);
     });
     $('bpm').addEventListener('input', (e) => {
       state.bpm = Number(e.target.value);
@@ -417,6 +443,7 @@
       saveSettings();
     });
     bindSeg('style', (v) => { state.style = v; renderSeg('style', v); saveSettings(); });
+    bindSeg('rhythm', (v) => { state.rhythm = v; renderSeg('rhythm', v); saveSettings(); });
     bindSeg('color', (v) => { state.color = v; renderSeg('color', v); renderDiatonic(); saveSettings(); });
     bindSeg('outside', (v) => { state.outside = v; renderSeg('outside', v); saveSettings(); });
     bindSeg('minorRef', (v) => { state.minorRef = v; render(false, null); });
@@ -465,7 +492,7 @@
       } else if (e.key === 'Enter' || e.key === 'r' || e.key === 'R') {
         e.preventDefault();
         roll();
-      } else if (/^[1-4]$/.test(e.key)) {
+      } else if (/^[1-8]$/.test(e.key) && Number(e.key) <= state.bars) {
         toggleLock(Number(e.key) - 1);
       }
     });
@@ -480,15 +507,18 @@
     const mode = p.get('m');
     if (mode !== 'major' && mode !== 'minor') return false;
     const chords = T.decodeChords(mode, p.get('c'));
-    if (!chords || chords.length !== BARS) return false;
+    const bars = p.has('b') ? Number(p.get('b')) : 4;
+    if (!chords || !BAR_COUNTS.includes(bars) || chords.length !== bars) return false;
     const k = Number(p.get('k'));
     const t = Number(p.get('t'));
-    if (T.encodeChords(chords) === T.encodeChords(state.chords) && mode === state.mode && k === state.keyPc) return false;
+    if (T.encodeChords(chords) === T.encodeChords(state.chords)
+      && mode === state.mode && k === state.keyPc && bars === state.bars) return false;
     state.mode = mode;
     state.keyPc = Number.isInteger(k) ? T.mod(k, 12) : state.keyPc;
+    state.bars = bars;
     if (t >= 50 && t <= 180) state.bpm = Math.round(t);
     state.chords = chords;
-    state.locks = [false, false, false, false];
+    state.locks = Array.from({ length: state.bars }, () => false);
     return true;
   }
 
@@ -496,6 +526,7 @@
     if (!['major', 'minor'].includes(state.mode)) state.mode = 'major';
     state.keyPc = T.mod(Number(state.keyPc) || 0, 12);
     if (!readHash()) {
+      randomizeKey();
       state.chords = T.generate(options(), [], []);
       addHistory(false);
     }

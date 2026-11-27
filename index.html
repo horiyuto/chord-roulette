@@ -3,15 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>コードルーレット｜4小節のコード進行をランダムに提案</title>
-  <meta name="description" content="ボタンを押すと、4小節ループ用のコード進行をランダムに提案します。コード名と度数表記（IIm、IV など）を同時に表示し、試聴とMIDI書き出しができます。">
+  <title>コードルーレット｜コード進行をランダムに提案</title>
+  <meta name="description" content="ボタンを押すと、2・4・8小節ループ用のコード進行をランダムに提案します。コード名と度数表記（IIm、IV など）を同時に表示し、試聴とMIDI書き出しができます。">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%B2%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="site-header">
     <h1>コードルーレット</h1>
-    <p class="lead">ボタンを押すと、4小節ループ用のコード進行（1小節に1コード）をランダムに提案します。</p>
+    <p class="lead">ボタンを押すと、選んだ長さのコード進行（1小節に1コード）をランダムに提案します。</p>
   </header>
 
   <main>
@@ -36,6 +36,23 @@
           <button type="button" data-v="whole">白玉</button>
           <button type="button" data-v="quarter">4分刻み</button>
           <button type="button" data-v="arp">アルペジオ</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">小節数</span>
+        <div class="seg" id="barCount" role="group" aria-label="コード進行の小節数">
+          <button type="button" data-v="2">2小節</button>
+          <button type="button" data-v="4">4小節</button>
+          <button type="button" data-v="8">8小節</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">リズム</span>
+        <div class="seg" id="rhythm" role="group" aria-label="ドラムのリズム">
+          <button type="button" data-v="none">なし</button>
+          <button type="button" data-v="eight">8ビート</button>
+          <button type="button" data-v="four">4つ打ち</button>
+          <button type="button" data-v="half">ハーフタイム</button>
         </div>
       </div>
     </section>
@@ -110,7 +127,7 @@
   </main>
 
   <footer class="site-footer">
-    <p>ショートカット: <kbd>Space</kbd> 再生／停止、<kbd>Enter</kbd> または <kbd>R</kbd> ランダムに提案、<kbd>1</kbd>〜<kbd>4</kbd> その小節を固定</p>
+    <p>ショートカット: <kbd>Space</kbd> 再生／停止、<kbd>Enter</kbd> または <kbd>R</kbd> ランダムに提案、<kbd>1</kbd>〜<kbd>8</kbd> その小節を固定</p>
     <p>コード選びの考え方は <a href="https://github.com/liotier/AkaiMPC" target="_blank" rel="noopener">liotier/AkaiMPC</a>（Unlicense）を参考にしました。</p>
   </footer>
 
