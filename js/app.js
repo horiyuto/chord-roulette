@@ -3,7 +3,6 @@
   'use strict';
 
   const T = window.ChordTheory;
-  const M = window.ChordMidi;
   const A = window.ChordAudio;
   const BAR_COUNTS = [2, 4, 8];
   const STORE_SETTINGS = 'chord-roulette:settings';
@@ -25,7 +24,6 @@
     randomKey: true,
     settingsVersion: 2,
     minorRef: 'tonic',
-    includeBass: true,
     historyFilter: 'all',
   };
 
@@ -92,7 +90,6 @@
   function roll() {
     randomizeKey();
     state.chords = T.generate(options(), state.chords, state.locks);
-    addHistory(false);
     render(true);
   }
 
@@ -115,19 +112,18 @@
     return a.keyPc === b.keyPc && a.mode === b.mode && (a.bars || 4) === (b.bars || 4) && a.code === b.code;
   }
 
-  function addHistory(fav) {
+  function rememberCurrent() {
     const cur = currentEntry();
+    if (saved.length && sameEntry(saved[0], cur)) return;
     const found = saved.find((h) => sameEntry(h, cur));
     if (found) {
-      if (fav) found.fav = true;
       saved = [found].concat(saved.filter((h) => h !== found));
     } else {
-      saved.unshift(Object.assign(cur, { fav: !!fav, at: Date.now() }));
+      saved.unshift(Object.assign(cur, { fav: false, at: Date.now() }));
     }
     let plain = 0;
     saved = saved.filter((h) => h.fav || ++plain <= HISTORY_MAX);
     saveJson(STORE_HISTORY, saved);
-    renderHistory();
   }
 
   function loadEntry(h) {
@@ -172,31 +168,9 @@
     renderSeg('historyFilter', state.historyFilter);
     $('bpm').value = state.bpm;
     $('bpmOut').textContent = state.bpm;
-    $('includeBass').checked = state.includeBass;
     $('startTonic').checked = state.startTonic;
     $('randomKey').checked = state.randomKey;
     $('minorRef').closest('.field').hidden = state.mode !== 'minor';
-  }
-
-  const WHITE = [0, 2, 4, 5, 7, 9, 11];
-  const KB_LOW = 48;
-  const KB_HIGH = 83;
-
-  function keyboardSvg(notes) {
-    const on = new Set(notes);
-    const whites = [];
-    const blacks = [];
-    let x = 0;
-    const W = 10;
-    for (let n = KB_LOW; n <= KB_HIGH; n++) {
-      if (WHITE.includes(n % 12)) {
-        whites.push(`<rect x="${x}" y="0" width="${W}" height="40" class="w${on.has(n) ? ' on' : ''}"/>`);
-        x += W;
-      } else {
-        blacks.push(`<rect x="${x - 3.2}" y="0" width="6.4" height="25" class="b${on.has(n) ? ' on' : ''}"/>`);
-      }
-    }
-    return `<svg viewBox="-0.5 -0.5 ${x + 1} 41" class="kbd" aria-hidden="true">${whites.join('')}${blacks.join('')}</svg>`;
   }
 
   function renderBars(changedIndex) {
@@ -204,7 +178,6 @@
     box.dataset.count = String(state.chords.length);
     const ns = names(state.chords);
     const rs = romans(state.chords);
-    const vs = voicings();
     box.innerHTML = '';
     state.chords.forEach((c, i) => {
       const card = document.createElement('article');
@@ -224,7 +197,6 @@
           <span class="roman">${rs[i]}</span>
         </button>
         <div class="tag tag-${c.tag}">${T.tagLabel(c, state.mode, state.minorRef)}</div>
-        ${keyboardSvg(vs[i])}
         <div class="tones">構成音 ${tones}<br>ベース ${bassName}</div>
         <button type="button" class="btn ghost small reroll">このコードだけ変える</button>`;
       box.appendChild(card);
@@ -256,14 +228,8 @@
   function renderHistory() {
     const box = $('history');
     box.innerHTML = '';
-    const list = saved.filter((h) => state.historyFilter === 'all' || h.fav);
-    if (!list.length) {
-      const li = document.createElement('li');
-      li.className = 'empty';
-      li.textContent = state.historyFilter === 'fav' ? 'お気に入りはまだありません。' : '履歴はまだありません。';
-      box.appendChild(li);
-      return;
-    }
+    const current = saved[0];
+    const list = saved.filter((h) => state.historyFilter === 'all' || h.fav || h === current);
     list.forEach((h) => {
       const chords = T.decodeChords(h.mode, h.code);
       if (!chords) return;
@@ -273,7 +239,7 @@
       li.innerHTML = `
         <button type="button" class="star" aria-pressed="${!!h.fav}" title="お気に入り">${h.fav ? '★' : '☆'}</button>
         <button type="button" class="load" title="この進行を呼び出す">
-          <span class="h-key">${T.keyLabel(h.keyPc, h.mode)}</span>
+          <span class="h-key">${h === current ? '表示中 · ' : ''}${T.keyLabel(h.keyPc, h.mode)}</span>
           <span class="h-names">${nm}</span>
           <span class="h-romans">${rm}</span>
         </button>
@@ -300,6 +266,7 @@
   }
 
   function render(all, changedIndex) {
+    rememberCurrent();
     renderControls();
     $('keyLabel').textContent = `キー: ${T.keyLabel(state.keyPc, state.mode)}`;
     $('tempoLabel').textContent = `${state.bpm} BPM`;
@@ -331,56 +298,6 @@
     const playing = A.Player.playing;
     $('play').textContent = playing ? '■ 停止' : '▶ 再生';
     $('play').setAttribute('aria-pressed', String(playing));
-  }
-
-  // ---- 書き出し ----
-  function asciiKey() {
-    return `${M.asciiName(T.tonicName(state.keyPc, state.mode))}-${state.mode}`;
-  }
-
-  function saveMidi() {
-    const withBass = state.includeBass;
-    const vs = T.voiceProgression(state.keyPc, state.chords, withBass);
-    const bars = vs.map((notes, i) => ({
-      notes: withBass ? [T.bassNote(state.keyPc, state.chords[i])].concat(notes) : notes,
-    }));
-    const label = `${T.tonicName(state.keyPc, state.mode)} ${state.mode}`;
-    const data = M.buildMidi({ bars, bpm: state.bpm, name: `Chord Roulette ${M.asciiName(label)}` });
-    const file = `chord-roulette_${asciiKey()}_${state.bpm}bpm_${names(state.chords).map(M.asciiName).join('-')}.mid`;
-    const url = URL.createObjectURL(new Blob([data], { type: 'audio/midi' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = file;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    toast(`${file} を保存しました`);
-  }
-
-  function progressionText() {
-    const row = (cells) => `| ${cells.join(' | ')} |`;
-    return [
-      `キー: ${T.keyLabel(state.keyPc, state.mode)} / ${state.bpm} BPM`,
-      row(names(state.chords)),
-      row(romans(state.chords)),
-    ].join('\n');
-  }
-
-  async function copy(text, message) {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch (_) {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      ta.remove();
-    }
-    toast(message);
   }
 
   let toastTimer = null;
@@ -419,7 +336,6 @@
       state.locks = Array.from({ length: state.bars }, () => false);
       randomizeKey();
       state.chords = T.generate(options(), [], []);
-      addHistory(false);
       render(true);
       toast(`${T.keyLabel(state.keyPc, state.mode)} で新しく提案しました`);
     });
@@ -430,7 +346,6 @@
       state.locks = Array.from({ length: bars }, () => false);
       randomizeKey();
       state.chords = T.generate(options(), [], []);
-      addHistory(false);
       render(true);
     });
     $('bpm').addEventListener('input', (e) => {
@@ -449,7 +364,7 @@
     bindSeg('minorRef', (v) => { state.minorRef = v; render(false, null); });
     bindSeg('historyFilter', (v) => { state.historyFilter = v; renderSeg('historyFilter', v); renderHistory(); saveSettings(); });
 
-    ['includeBass', 'startTonic', 'randomKey'].forEach((id) => {
+    ['startTonic', 'randomKey'].forEach((id) => {
       $(id).addEventListener('change', (e) => { state[id] = e.target.checked; saveSettings(); });
     });
 
@@ -462,12 +377,8 @@
       else if (e.target.closest('.chord')) A.preview(voicings()[i], basses()[i]);
     });
 
-    $('midi').addEventListener('click', saveMidi);
-    $('copyText').addEventListener('click', () => copy(progressionText(), 'コード進行をコピーしました'));
-    $('copyUrl').addEventListener('click', () => copy(location.href, 'この進行のURLをコピーしました'));
-    $('fav').addEventListener('click', () => { addHistory(true); toast('お気に入りに保存しました'); });
     $('clearHistory').addEventListener('click', () => {
-      saved = saved.filter((h) => h.fav);
+      saved = saved.filter((h, i) => i === 0 || h.fav);
       saveJson(STORE_HISTORY, saved);
       renderHistory();
     });
@@ -528,7 +439,6 @@
     if (!readHash()) {
       randomizeKey();
       state.chords = T.generate(options(), [], []);
-      addHistory(false);
     }
     bind();
     render(true);

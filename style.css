@@ -48,7 +48,7 @@ h2 { margin: 0 0 6px; font-size: 1.05rem; }
   margin-bottom: 16px;
 }
 
-.controls, .export {
+.controls {
   display: flex;
   flex-wrap: wrap;
   gap: 12px 24px;
@@ -221,12 +221,6 @@ button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-v
 .tag-dorian, .tag-harmonic { color: var(--green); }
 .tag-passing { color: var(--blue); }
 
-.kbd { width: 100%; height: auto; display: block; }
-.kbd .w { fill: #e9edf3; stroke: #3a4352; stroke-width: 0.6; }
-.kbd .b { fill: #1b2029; stroke: #1b2029; stroke-width: 0.6; }
-.kbd .w.on { fill: var(--accent); }
-.kbd .b.on { fill: #d58f15; }
-
 .tones { font-size: 0.8rem; color: var(--muted); text-align: center; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -261,8 +255,6 @@ button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-v
   border-bottom: 1px solid var(--line);
   padding: 6px 0;
 }
-
-.history li.empty { color: var(--muted); font-size: 0.9rem; border: 0; }
 
 .history .star {
   background: none;
