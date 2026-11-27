@@ -78,6 +78,27 @@ select {
 #bpm { width: 160px; }
 #bpmOut { min-width: 2.2em; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
 
+.touch-picker { display: none; }
+
+@media (max-width: 640px), (any-pointer: coarse) {
+  .touch-picker:not([hidden]) { display: block; }
+  .touch-picker:not([hidden]) ~ label, .touch-picker:not([hidden]) ~ select { display: none; }
+  .touch-picker[open] { width: 100%; }
+  .touch-picker summary, .touch-picker button {
+    min-height: 44px;
+    padding: 8px 12px;
+    font: inherit;
+    cursor: pointer;
+    color: var(--text);
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .touch-picker .choices { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .touch-picker button { min-width: 44px; }
+  .touch-picker button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+}
+
 .seg {
   display: inline-flex;
   border: 1px solid var(--line);

@@ -207,6 +207,28 @@
     sel.value = String(state.keyPc);
   }
 
+  function renderTouchPicker(id) {
+    const select = $(id);
+    const picker = $(`${id}Picker`);
+    if (!picker) return; // A cached page from before the touch controls still uses the native select.
+    const choices = picker.querySelector('.choices');
+    const current = picker.querySelector('strong');
+    Array.from(select.options).forEach((option, i) => {
+      let button = choices.children[i];
+      if (!button) {
+        button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.v = option.value;
+        choices.appendChild(button);
+      }
+      const selected = option.value === select.value;
+      button.textContent = option.textContent;
+      button.setAttribute('aria-pressed', String(selected));
+      if (selected) current.textContent = option.textContent;
+    });
+    picker.hidden = false;
+  }
+
   function renderControls() {
     renderKeySelect();
     renderSeg('mode', state.mode);
@@ -230,6 +252,7 @@
     $('startTonic').checked = state.startTonic;
     $('randomKey').checked = state.randomKey;
     $('minorRef').closest('.field').hidden = state.mode !== 'minor';
+    ['key', 'style', 'rhythm'].forEach(renderTouchPicker);
   }
 
   function renderBars(changedIndex) {
@@ -379,6 +402,21 @@
     });
   }
 
+  function bindPicker(id, onChange) {
+    const select = $(id);
+    const picker = $(`${id}Picker`);
+    select.addEventListener('change', (e) => onChange(e.target.value));
+    if (!picker) return;
+    bindSeg(picker.id, (value) => {
+      if (value !== select.value) {
+        select.value = value;
+        onChange(value);
+      }
+      picker.open = false;
+      picker.querySelector('summary').focus();
+    });
+  }
+
   function toggleLock(i) {
     state.locks[i] = !state.locks[i];
     renderBars(null);
@@ -388,9 +426,9 @@
     $('roll').addEventListener('click', roll);
     $('play').addEventListener('click', togglePlay);
 
-    $('key').addEventListener('change', (e) => {
+    bindPicker('key', (value) => {
       const before = snapshot();
-      setKey(Number(e.target.value));
+      setKey(Number(value));
       pushUndo(before);
       render(false, null);
     });
@@ -414,8 +452,13 @@
       updateHash();
       saveSettings();
     });
-    $('style').addEventListener('change', (e) => { state.style = e.target.value; saveSettings(); });
-    $('rhythm').addEventListener('change', (e) => { state.rhythm = e.target.value; saveSettings(); });
+    for (const id of ['style', 'rhythm']) {
+      bindPicker(id, (value) => {
+        state[id] = value;
+        renderTouchPicker(id);
+        saveSettings();
+      });
+    }
     bindSeg('color', (v) => { state.color = v; renderSeg('color', v); renderDiatonic(); saveSettings(); });
     bindSeg('outside', (v) => { state.outside = v; renderSeg('outside', v); saveSettings(); });
     bindSeg('minorRef', (v) => { state.minorRef = v; render(false, null); });
