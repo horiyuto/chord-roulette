@@ -47,13 +47,33 @@
         </div>
       </div>
       <div class="field">
-        <span class="label">リズム</span>
-        <div class="seg" id="rhythm" role="group" aria-label="ドラムのリズム">
-          <button type="button" data-v="none">なし</button>
-          <button type="button" data-v="eight">8ビート</button>
-          <button type="button" data-v="four">4つ打ち</button>
-          <button type="button" data-v="half">ハーフタイム</button>
-        </div>
+        <label class="label" for="rhythm">リズム</label>
+        <select id="rhythm">
+          <option value="none">なし</option>
+          <optgroup label="基本">
+            <option value="eight">8ビート</option>
+            <option value="sixteen">16ビート</option>
+            <option value="four">4つ打ち</option>
+            <option value="half">ハーフタイム</option>
+            <option value="shuffle">シャッフル</option>
+          </optgroup>
+          <optgroup label="バラード">
+            <option value="ballad">バラード</option>
+            <option value="triplet">バラード（3連）</option>
+          </optgroup>
+          <optgroup label="ダンス・ヒップホップ">
+            <option value="disco">ディスコ</option>
+            <option value="funk">ファンク</option>
+            <option value="hiphop">ヒップホップ</option>
+            <option value="trap">トラップ</option>
+            <option value="reggaeton">レゲトン</option>
+          </optgroup>
+          <optgroup label="ジャズ・ワールド">
+            <option value="jazz">ジャズ（4ビート）</option>
+            <option value="bossa">ボサノバ</option>
+            <option value="reggae">レゲエ（ワンドロップ）</option>
+          </optgroup>
+        </select>
       </div>
     </section>
 
