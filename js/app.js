@@ -8,6 +8,7 @@
   const STORE_SETTINGS = 'chord-roulette:settings';
   const STORE_HISTORY = 'chord-roulette:history';
   const HISTORY_MAX = 40;
+  const UNDO_MAX = 20;
 
   const $ = (id) => document.getElementById(id);
 
@@ -33,6 +34,7 @@
   state.chords = [];
   state.bars = BAR_COUNTS.includes(Number(state.bars)) ? Number(state.bars) : 4;
   state.locks = Array.from({ length: state.bars }, () => false);
+  let undo = [];
   let saved = loadJson(STORE_HISTORY, []);
   if (!Array.isArray(saved)) saved = [];
 
@@ -87,9 +89,38 @@
     }, extra);
   }
 
+  // 小節ごとに、変わる前のコードを積んでおく（このページを開いている間だけ）
+  function resetUndo() {
+    undo = state.chords.map(() => []);
+  }
+
+  function pushUndo(before) {
+    state.chords.forEach((c, i) => {
+      if (!before[i] || T.encodeChords([c]) === T.encodeChords([before[i]])) return;
+      undo[i] = (undo[i] || []).concat([before[i]]).slice(-UNDO_MAX);
+    });
+  }
+
+  function undoOne(i) {
+    if (!undo[i] || !undo[i].length) return;
+    state.chords = state.chords.slice();
+    state.chords[i] = undo[i].pop();
+    render(false, i);
+  }
+
   function roll() {
+    const before = state.chords;
     randomizeKey();
     state.chords = T.generate(options(), state.chords, state.locks);
+    pushUndo(before);
+    render(true);
+  }
+
+  function newProgression() {
+    state.locks = Array.from({ length: state.bars }, () => false);
+    randomizeKey();
+    state.chords = T.generate(options(), [], []);
+    resetUndo();
     render(true);
   }
 
@@ -99,7 +130,9 @@
 
   function rerollOne(i) {
     const locks = state.locks.map((_, j) => j !== i);
+    const before = state.chords;
     state.chords = T.generate(options({ startTonic: false, avoid: { [i]: state.chords[i] } }), state.chords, locks);
+    pushUndo(before);
     render(false, i);
   }
 
@@ -134,6 +167,7 @@
     state.bars = chords.length;
     state.chords = chords;
     state.locks = Array.from({ length: state.bars }, () => false);
+    resetUndo();
     render(true);
   }
 
@@ -159,7 +193,11 @@
   function renderControls() {
     renderKeySelect();
     renderSeg('mode', state.mode);
-    renderSeg('style', state.style);
+    $('style').value = state.style;
+    if ($('style').value !== state.style) {
+      state.style = 'whole';
+      $('style').value = 'whole';
+    }
     renderSeg('barCount', String(state.bars));
     $('rhythm').value = state.rhythm;
     if ($('rhythm').value !== state.rhythm) {
@@ -189,20 +227,22 @@
       if (state.locks[i]) card.classList.add('locked');
       if (changedIndex === 'all' || changedIndex === i) card.classList.add('fresh');
       card.dataset.i = i;
-      const tones = T.chordToneNames(state.keyPc, state.mode, c).join(' ');
-      const bassName = T.chordToneNames(state.keyPc, state.mode, c)[0];
+      const n = i + 1;
+      const canUndo = !!(undo[i] && undo[i].length);
       card.innerHTML = `
         <div class="bar-head">
-          <span class="bar-no">${i + 1}小節目</span>
-          <button type="button" class="lock" aria-pressed="${state.locks[i]}" title="固定すると、ランダムに提案しても変わりません（キー ${i + 1}）">${state.locks[i] ? '固定中' : '固定'}</button>
+          <span class="bar-no">${n}</span>
+          <span class="tools">
+            <button type="button" class="icon undo" title="前のコードに戻す" aria-label="${n}小節目を前のコードに戻す"${canUndo ? '' : ' disabled'}>↶</button>
+            <button type="button" class="icon reroll" title="このコードだけ変える" aria-label="${n}小節目のコードだけ変える">🎲</button>
+            <button type="button" class="icon lock" aria-pressed="${state.locks[i]}" title="${state.locks[i] ? '固定を外す' : '固定する'}（キー ${n}）" aria-label="${n}小節目を固定">${state.locks[i] ? '🔒' : '🔓'}</button>
+          </span>
         </div>
         <button type="button" class="chord" title="クリックで試聴">
           <span class="name">${ns[i]}</span>
           <span class="roman">${rs[i]}</span>
         </button>
-        <div class="tag tag-${c.tag}">${T.tagLabel(c, state.mode, state.minorRef)}</div>
-        <div class="tones">構成音 ${tones}<br>ベース ${bassName}</div>
-        <button type="button" class="btn ghost small reroll">このコードだけ変える</button>`;
+        <div class="tag tag-${c.tag}">${T.tagLabel(c, state.mode, state.minorRef)}</div>`;
       box.appendChild(card);
     });
   }
@@ -272,8 +312,6 @@
   function render(all, changedIndex) {
     rememberCurrent();
     renderControls();
-    $('keyLabel').textContent = `キー: ${T.keyLabel(state.keyPc, state.mode)}`;
-    $('tempoLabel').textContent = `${state.bpm} BPM`;
     renderBars(all ? 'all' : changedIndex);
     renderDiatonic();
     renderHistory();
@@ -337,31 +375,24 @@
     bindSeg('mode', (v) => {
       if (v === state.mode) return;
       state.mode = v;
-      state.locks = Array.from({ length: state.bars }, () => false);
-      randomizeKey();
-      state.chords = T.generate(options(), [], []);
-      render(true);
+      newProgression();
       toast(`${T.keyLabel(state.keyPc, state.mode)} で新しく提案しました`);
     });
     bindSeg('barCount', (v) => {
       const bars = Number(v);
       if (!BAR_COUNTS.includes(bars) || bars === state.bars) return;
       state.bars = bars;
-      state.locks = Array.from({ length: bars }, () => false);
-      randomizeKey();
-      state.chords = T.generate(options(), [], []);
-      render(true);
+      newProgression();
     });
     $('bpm').addEventListener('input', (e) => {
       state.bpm = Number(e.target.value);
       $('bpmOut').textContent = state.bpm;
-      $('tempoLabel').textContent = `${state.bpm} BPM`;
     });
     $('bpm').addEventListener('change', () => {
       updateHash();
       saveSettings();
     });
-    bindSeg('style', (v) => { state.style = v; renderSeg('style', v); saveSettings(); });
+    $('style').addEventListener('change', (e) => { state.style = e.target.value; saveSettings(); });
     $('rhythm').addEventListener('change', (e) => { state.rhythm = e.target.value; saveSettings(); });
     bindSeg('color', (v) => { state.color = v; renderSeg('color', v); renderDiatonic(); saveSettings(); });
     bindSeg('outside', (v) => { state.outside = v; renderSeg('outside', v); saveSettings(); });
@@ -377,6 +408,7 @@
       if (!card) return;
       const i = Number(card.dataset.i);
       if (e.target.closest('.lock')) toggleLock(i);
+      else if (e.target.closest('.undo')) undoOne(i);
       else if (e.target.closest('.reroll')) rerollOne(i);
       else if (e.target.closest('.chord')) A.preview(voicings()[i], basses()[i]);
     });
@@ -413,7 +445,10 @@
     });
 
     window.addEventListener('hashchange', () => {
-      if (readHash()) render(true);
+      if (readHash()) {
+        resetUndo();
+        render(true);
+      }
     });
   }
 
@@ -444,6 +479,7 @@
       randomizeKey();
       state.chords = T.generate(options(), [], []);
     }
+    resetUndo();
     bind();
     render(true);
   }

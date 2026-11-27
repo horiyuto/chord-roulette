@@ -10,7 +10,7 @@ function element() {
   const selectors = new Map();
   return {
     children: [], dataset: {}, classList: { add() {} },
-    set innerHTML(_) { this.children = []; selectors.clear(); },
+    set innerHTML(html) { this.html = html; this.children = []; selectors.clear(); },
     appendChild(child) { this.children.push(child); },
     querySelectorAll() { return []; },
     querySelector(selector) {
@@ -36,7 +36,7 @@ function openApp(hash, entries) {
     getElementById: (id) => nodes.get(id), createElement: element,
   });
   vm.runInNewContext(fs.readFileSync(require.resolve('../js/app.js'), 'utf8'), {
-    document, window, location, URLSearchParams,
+    document, window, location, URLSearchParams, setTimeout: () => 0, clearTimeout() {},
     localStorage: { getItem: (k) => storage.get(k), setItem: (k, v) => storage.set(k, v) },
   });
   return { node: (id) => nodes.get(id), entries: () => JSON.parse(storage.get(historyKey)), window, location };
@@ -78,4 +78,51 @@ test('共有URL・移調・1小節の再提案を履歴からお気に入りに�
   assert.deepEqual(app.entries(), [displayed, legacy, sharedFavorite]);
   firstStar().click();
   assert.equal(current().fav, true);
+});
+
+test('小節ごとに前のコードへ戻せて、ほかの小節はそのまま', () => {
+  const code = 'I.maj_IV.maj_V.dom7_IIm.m';
+  const app = openApp(`#m=major&k=2&c=${code}&t=120`, []);
+  const bars = app.node('bars');
+  const codes = () => app.entries()[0].code.split('_');
+  const click = (i, button) => {
+    const card = bars.children[i];
+    bars.click({ target: { closest: (s) => (s === '.bar' ? card : s === button) } });
+  };
+  const undoDisabled = (i) => / disabled>↶/.test(bars.children[i].html);
+
+  const original = codes();
+  assert.ok(undoDisabled(1));
+  click(1, '.undo');
+  assert.deepEqual(codes(), original);
+
+  click(1, '.reroll');
+  const once = codes();
+  click(1, '.reroll');
+  assert.notEqual(codes()[1], once[1]);
+  assert.ok(!undoDisabled(1));
+  assert.ok(undoDisabled(2));
+  click(1, '.undo');
+  assert.deepEqual(codes(), once);
+  click(1, '.undo');
+  assert.deepEqual(codes(), original);
+  assert.ok(undoDisabled(1));
+  assert.equal(app.entries()[0].keyPc, 2);
+
+  click(0, '.lock');
+  let before;
+  for (let n = 0; n < 20; n++) {
+    before = codes();
+    app.node('roll').click();
+    if (codes().some((c, i) => c !== before[i])) break;
+  }
+  const rolled = codes();
+  assert.equal(rolled[0], before[0]);
+  const changed = rolled.findIndex((c, i) => c !== before[i]);
+  assert.ok(changed > 0);
+  click(changed, '.undo');
+  assert.deepEqual(codes(), rolled.map((c, i) => (i === changed ? before[i] : c)));
+
+  app.node('mode').click({ target: { closest: () => ({ dataset: { v: 'minor' } }) } });
+  bars.children.forEach((_, i) => assert.ok(undoDisabled(i)));
 });

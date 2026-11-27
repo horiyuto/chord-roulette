@@ -91,31 +91,107 @@
     o2.stop(t + dur + 0.5);
   }
 
+  // ふわっと立ち上がって伸びる音（少しずらした2つの波を重ねる）
+  function padNote(bus, midi, t, dur, vel) {
+    const f = mtof(midi);
+    const filt = ctx.createBiquadFilter();
+    const env = ctx.createGain();
+    filt.type = 'lowpass';
+    filt.frequency.value = 1600;
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(vel, t + Math.min(0.35, dur * 0.4));
+    env.gain.setTargetAtTime(0, t + dur, 0.25);
+    filt.connect(env).connect(bus);
+    [-6, 6].forEach((cents) => {
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = f;
+      o.detune.value = cents;
+      o.connect(filt);
+      o.start(t);
+      o.stop(t + dur + 1.2);
+    });
+  }
+
   function chordAt(bus, voicing, bass, t, dur) {
     const vel = 0.5 / Math.max(3, voicing.length);
     voicing.forEach((n) => keyNote(bus, n, t, dur, vel));
     if (bass != null) bassNote(bus, bass, t, dur, 0.32);
   }
 
-  function arpSequence(voicing) {
+  function arpSequence(voicing, length) {
     const up = voicing.concat([voicing[0] + 12]);
     const seq = up.concat(up.slice(1, -1).reverse());
-    return Array.from({ length: 8 }, (_, i) => seq[i % seq.length]);
+    return Array.from({ length }, (_, i) => seq[i % seq.length]);
+  }
+
+  // 弾き方ごとに、1小節ぶんの音を {inst, note, beat, dur, vel} で返す（beat と dur は拍単位）
+  function styleEvents(style, voicing, bass) {
+    const events = [];
+    const vel = 0.5 / Math.max(3, voicing.length);
+    const key = (note, beat, dur, v) => events.push({ inst: 'key', note, beat, dur, vel: v });
+    const chord = (beat, dur, scale) => voicing.forEach((n) => key(n, beat, dur, vel * (scale || 1)));
+    const low = (beat, dur, v) => {
+      if (bass != null) events.push({ inst: 'bass', note: bass, beat, dur, vel: v });
+    };
+    const arp = (count, dur, v) => {
+      arpSequence(voicing, count).forEach((n, i) => key(n, (i * 4) / count, dur, v));
+      low(0, 3.88, 0.32);
+    };
+
+    if (style === 'quarter') {
+      [0, 1, 2, 3].forEach((b) => chord(b, 0.85));
+      low(0, 1.9, 0.32);
+      low(2, 1.9, 0.3);
+    } else if (style === 'eighth') {
+      for (let i = 0; i < 8; i++) chord(i / 2, 0.42, i % 2 ? 0.6 : 1);
+      low(0, 1.9, 0.32);
+      low(2, 1.9, 0.3);
+    } else if (style === 'sync') {
+      [[0, 1.4], [1.5, 1.4], [3, 0.9]].forEach(([b, d]) => {
+        chord(b, d);
+        low(b, d, 0.3);
+      });
+    } else if (style === 'offbeat') {
+      [0, 1, 2, 3].forEach((b) => {
+        low(b, 0.45, 0.34);
+        chord(b + 0.5, 0.3, 1.3);
+      });
+    } else if (style === 'strum') {
+      // ダウンは低い弦から、アップは高い弦から少しずつずらして鳴らす（D・DU・UDU）
+      [[0, 0.95, 1], [1, 0.45, 1], [1.5, 0.9, 0.7], [2.5, 0.45, 0.7], [3, 0.45, 1], [3.5, 0.45, 0.7]]
+        .forEach(([b, d, v], k) => {
+          const notes = [0, 1, 4].includes(k) ? voicing : voicing.slice().reverse();
+          notes.forEach((n, j) => key(n, b + j * 0.02, d, vel * v));
+        });
+      low(0, 1.9, 0.32);
+      low(2, 1.9, 0.3);
+    } else if (style === 'pad') {
+      voicing.forEach((n) => events.push({ inst: 'pad', note: n, beat: 0, dur: 3.9, vel: vel * 0.9 }));
+      low(0, 3.88, 0.26);
+    } else if (style === 'arp') {
+      arp(8, 0.9, 0.16);
+    } else if (style === 'arp16') {
+      arp(16, 0.45, 0.13);
+    } else if (style === 'arp3') {
+      arp(12, 0.6, 0.15);
+    } else if (style === 'alberti') {
+      const top = voicing[voicing.length - 1];
+      const mid = voicing[Math.floor(voicing.length / 2)];
+      [voicing[0], top, mid, top, voicing[0], top, mid, top].forEach((n, i) => key(n, i / 2, 0.9, 0.16));
+      low(0, 3.88, 0.32);
+    } else {
+      chord(0, 3.88);
+      low(0, 3.88, 0.32);
+    }
+    return events;
   }
 
   function scheduleBar(bus, style, voicing, bass, t, beat) {
-    if (style === 'quarter') {
-      for (let b = 0; b < 4; b++) chordAt(bus, voicing, null, t + b * beat, beat * 0.85);
-      bassNote(bus, bass, t, beat * 1.9, 0.32);
-      bassNote(bus, bass, t + 2 * beat, beat * 1.9, 0.3);
-    } else if (style === 'arp') {
-      const seq = arpSequence(voicing);
-      const vel = 0.16;
-      seq.forEach((n, i) => keyNote(bus, n, t + i * beat * 0.5, beat * 0.9, vel));
-      bassNote(bus, bass, t, beat * 4 * 0.97, 0.32);
-    } else {
-      chordAt(bus, voicing, bass, t, beat * 4 * 0.97);
-    }
+    styleEvents(style, voicing, bass).forEach((e) => {
+      const play = e.inst === 'bass' ? bassNote : e.inst === 'pad' ? padNote : keyNote;
+      play(bus, e.note, t + e.beat * beat, e.dur * beat, e.vel);
+    });
   }
 
   // 空白で区切った1かたまりが1拍。拍の中は文字数で等分する（2文字=8分、3文字=3連、4文字=16分）。
@@ -305,5 +381,5 @@
     chordAt(previewBus, voicing, bass, ctx.currentTime + 0.02, 1.6);
   }
 
-  global.ChordAudio = { Player, preview, drumEvents };
+  global.ChordAudio = { Player, preview, drumEvents, styleEvents };
 })(window);

@@ -33,12 +33,10 @@ main, .site-header, .site-footer {
   padding: 0 16px;
 }
 
-.site-header { padding-top: 28px; }
-.site-header h1 { margin: 0; font-size: 1.8rem; letter-spacing: 0.04em; }
-.lead { margin: 4px 0 20px; color: var(--muted); }
+.site-header { padding: 20px 16px 14px; }
+.site-header h1 { margin: 0; font-size: 1.6rem; letter-spacing: 0.04em; }
 
 h2 { margin: 0 0 6px; font-size: 1.05rem; }
-.hint { margin: 0 0 10px; color: var(--muted); font-size: 0.85rem; }
 
 .panel {
   background: var(--panel);
@@ -64,6 +62,7 @@ h2 { margin: 0 0 6px; font-size: 1.05rem; }
 
 .options .field { margin-top: 12px; }
 .options summary { cursor: pointer; font-weight: 600; }
+.options .chips { margin-top: 12px; }
 
 .label { color: var(--muted); font-size: 0.9rem; }
 .unit { color: var(--muted); font-size: 0.85rem; }
@@ -139,15 +138,6 @@ button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-v
   margin: 8px 0 16px;
 }
 
-.key-line {
-  display: flex;
-  justify-content: space-between;
-  margin: 0 2px 8px;
-  font-weight: 600;
-}
-
-#tempoLabel { color: var(--muted); font-weight: 400; }
-
 .bars {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -161,10 +151,10 @@ button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-v
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 10px 12px 12px;
+  padding: 8px 10px 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
@@ -181,28 +171,38 @@ button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-v
   .bar.fresh .chord { animation: none; }
 }
 
-.bar-head { display: flex; justify-content: space-between; align-items: center; }
-.bar-no { color: var(--muted); font-size: 0.85rem; }
+.bar-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.bar-no { color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.tools { display: inline-flex; gap: 4px; }
 
-.lock {
+.icon {
+  width: 30px;
+  height: 30px;
+  display: inline-grid;
+  place-items: center;
   background: transparent;
-  color: var(--muted);
+  color: var(--text);
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 2px 10px;
+  padding: 0;
   font: inherit;
-  font-size: 0.78rem;
+  font-size: 0.95rem;
+  line-height: 1;
   cursor: pointer;
 }
 
-.lock[aria-pressed="true"] { background: var(--blue); border-color: var(--blue); color: #08131f; font-weight: 600; }
+.icon:hover:not(:disabled) { background: var(--panel-2); }
+.icon:disabled { opacity: 0.3; cursor: default; }
+.undo { font-size: 1.15rem; font-weight: 700; }
+.lock[aria-pressed="false"] { filter: grayscale(1); }
+.lock[aria-pressed="true"] { background: var(--blue); border-color: var(--blue); }
 
 .chord {
   background: var(--panel-2);
   border: 1px solid transparent;
   border-radius: 10px;
   color: var(--text);
-  padding: 12px 6px;
+  padding: 10px 6px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
@@ -220,8 +220,6 @@ button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-v
 .tag-borrowed, .tag-neapolitan { color: var(--violet); }
 .tag-dorian, .tag-harmonic { color: var(--green); }
 .tag-passing { color: var(--blue); }
-
-.tones { font-size: 0.8rem; color: var(--muted); text-align: center; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 
