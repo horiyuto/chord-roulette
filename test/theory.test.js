@@ -187,3 +187,45 @@ test('増やしたリズムも3連・弱い音・2小節でひと回りするパ
     if (pattern !== 'bossa') assert.deepEqual(events(pattern, 1), events(pattern, 0), pattern);
   });
 });
+
+test('弾き方は1小節の中で拍どおりに鳴り、保存済みの白玉・4分刻み・アルペジオも選べる', () => {
+  const window = {};
+  vm.runInNewContext(fs.readFileSync(require.resolve('../js/audio.js'), 'utf8'), { window });
+  const voicing = [60, 64, 67];
+  const events = (style) => Array.from(window.ChordAudio.styleEvents(style, voicing, 36));
+  const onsets = (style, inst) => Array.from(new Set(events(style)
+    .filter((event) => event.inst === inst).map((event) => event.beat)));
+  const notes = (style) => events(style).filter((event) => event.inst === 'key').map((event) => event.note);
+
+  assert.deepEqual(onsets('whole', 'key'), [0]);
+  assert.deepEqual(onsets('quarter', 'key'), [0, 1, 2, 3]);
+  assert.deepEqual(onsets('arp', 'key'), [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5]);
+  assert.deepEqual(notes('arp'), [60, 64, 67, 72, 67, 64, 60, 64]);
+  assert.deepEqual(onsets('eighth', 'key'), [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5]);
+  assert.deepEqual(onsets('sync', 'key'), [0, 1.5, 3]);
+  assert.deepEqual(onsets('offbeat', 'key'), [0.5, 1.5, 2.5, 3.5]);
+  assert.deepEqual(onsets('offbeat', 'bass'), [0, 1, 2, 3]);
+  assert.deepEqual(onsets('arp3', 'key'), Array.from({ length: 12 }, (_, i) => i / 3));
+  assert.deepEqual(onsets('arp16', 'key'), Array.from({ length: 16 }, (_, i) => i / 4));
+  assert.deepEqual(notes('alberti').slice(0, 4), [60, 67, 64, 67]);
+  assert.deepEqual(onsets('pad', 'pad'), [0]);
+  assert.deepEqual(events('nope'), events('whole'));
+
+  const strum = events('strum').filter((event) => event.inst === 'key');
+  const stroke = (beat) => strum.filter((event) => Math.abs(event.beat - beat) < 0.1).map((event) => event.note);
+  assert.deepEqual(stroke(0), [60, 64, 67]);
+  assert.deepEqual(stroke(1.5), [67, 64, 60]);
+
+  const html = fs.readFileSync(require.resolve('../index.html'), 'utf8');
+  const select = html.match(/<select id="style">([\s\S]*?)<\/select>/)[1];
+  const styles = Array.from(select.matchAll(/<option value="(\w+)"/g), (m) => m[1]);
+  ['whole', 'quarter', 'arp'].forEach((saved) => assert.ok(styles.includes(saved), saved));
+  styles.forEach((style) => {
+    const list = events(style);
+    assert.ok(list.some((event) => event.inst === 'bass'), style);
+    list.forEach((event) => {
+      assert.ok(['key', 'bass', 'pad'].includes(event.inst), style);
+      assert.ok(event.beat >= 0 && event.beat < 4 && event.dur > 0 && event.vel > 0, style);
+    });
+  });
+});

@@ -11,7 +11,6 @@
 <body>
   <header class="site-header">
     <h1>コードルーレット</h1>
-    <p class="lead">ボタンを押すと、選んだ長さのコード進行（1小節に1コード）をランダムに提案します。</p>
   </header>
 
   <main>
@@ -31,12 +30,26 @@
         <span class="unit">BPM</span>
       </div>
       <div class="field">
-        <span class="label">弾き方</span>
-        <div class="seg" id="style" role="group" aria-label="弾き方">
-          <button type="button" data-v="whole">白玉</button>
-          <button type="button" data-v="quarter">4分刻み</button>
-          <button type="button" data-v="arp">アルペジオ</button>
-        </div>
+        <label class="label" for="style">弾き方</label>
+        <select id="style">
+          <optgroup label="伸ばす">
+            <option value="whole">白玉</option>
+            <option value="pad">パッド</option>
+          </optgroup>
+          <optgroup label="刻む">
+            <option value="quarter">4分刻み</option>
+            <option value="eighth">8分刻み</option>
+            <option value="sync">シンコペーション</option>
+            <option value="offbeat">裏打ち</option>
+            <option value="strum">ストローク</option>
+          </optgroup>
+          <optgroup label="アルペジオ">
+            <option value="arp">アルペジオ</option>
+            <option value="arp3">アルペジオ（3連）</option>
+            <option value="arp16">アルペジオ（16分）</option>
+            <option value="alberti">アルベルティ</option>
+          </optgroup>
+        </select>
       </div>
       <div class="field">
         <span class="label">小節数</span>
@@ -83,11 +96,10 @@
     </section>
 
     <section class="result" aria-live="polite">
-      <p class="key-line"><span id="keyLabel"></span><span id="tempoLabel"></span></p>
       <div id="bars" class="bars"></div>
     </section>
 
-    <details class="panel options" open>
+    <details class="panel options">
       <summary>提案の条件</summary>
       <div class="field">
         <span class="label">コードの響き</span>
@@ -119,11 +131,10 @@
       </div>
     </details>
 
-    <section class="panel">
-      <h2>このキーのダイアトニックコード</h2>
-      <p class="hint">クリックで試聴できます。</p>
-      <div id="diatonic" class="chips"></div>
-    </section>
+    <details class="panel options">
+      <summary>このキーのダイアトニックコード</summary>
+      <div id="diatonic" class="chips" title="クリックで試聴"></div>
+    </details>
 
     <section class="panel">
       <div class="history-head">
