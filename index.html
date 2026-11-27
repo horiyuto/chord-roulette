@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>コードルーレット｜4小節のコード進行をランダムに提案</title>
+  <meta name="description" content="ボタンを押すと、4小節ループ用のコード進行をランダムに提案します。コード名と度数表記（IIm、IV など）を同時に表示し、試聴とMIDI書き出しができます。">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%B2%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="site-header">
+    <h1>コードルーレット</h1>
+    <p class="lead">ボタンを押すと、4小節ループ用のコード進行（1小節に1コード）をランダムに提案します。</p>
+  </header>
+
+  <main>
+    <section class="panel controls" aria-label="基本設定">
+      <div class="field">
+        <span class="label">キー</span>
+        <select id="key" aria-label="主音"></select>
+        <div class="seg" id="mode" role="group" aria-label="メジャー／マイナー">
+          <button type="button" data-v="major">メジャー</button>
+          <button type="button" data-v="minor">マイナー</button>
+        </div>
+      </div>
+      <div class="field">
+        <label class="label" for="bpm">テンポ</label>
+        <input type="range" id="bpm" min="50" max="180" step="1">
+        <output id="bpmOut" for="bpm"></output>
+        <span class="unit">BPM</span>
+      </div>
+      <div class="field">
+        <span class="label">弾き方</span>
+        <div class="seg" id="style" role="group" aria-label="弾き方">
+          <button type="button" data-v="whole">白玉</button>
+          <button type="button" data-v="quarter">4分刻み</button>
+          <button type="button" data-v="arp">アルペジオ</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="actions">
+      <button type="button" id="roll" class="btn primary big">ランダムに提案</button>
+      <button type="button" id="play" class="btn big" aria-pressed="false">▶ 再生</button>
+    </section>
+
+    <section class="result" aria-live="polite">
+      <p class="key-line"><span id="keyLabel"></span><span id="tempoLabel"></span></p>
+      <div id="bars" class="bars"></div>
+    </section>
+
+    <section class="panel export" aria-label="書き出し">
+      <button type="button" id="midi" class="btn">MIDIを保存</button>
+      <label class="check"><input type="checkbox" id="includeBass"> ベースを含める</label>
+      <button type="button" id="copyText" class="btn">テキストをコピー</button>
+      <button type="button" id="copyUrl" class="btn">URLをコピー</button>
+      <button type="button" id="fav" class="btn">★ お気に入りに保存</button>
+    </section>
+
+    <details class="panel options" open>
+      <summary>提案の条件</summary>
+      <div class="field">
+        <span class="label">コードの響き</span>
+        <div class="seg" id="color" role="group" aria-label="コードの響き">
+          <button type="button" data-v="triad">3和音</button>
+          <button type="button" data-v="seventh">7th</button>
+          <button type="button" data-v="mix">ミックス</button>
+          <button type="button" data-v="rich">テンション多め</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">ノンダイアトニック</span>
+        <div class="seg" id="outside" role="group" aria-label="ノンダイアトニックの頻度">
+          <button type="button" data-v="0">なし</button>
+          <button type="button" data-v="0.2">ときどき</button>
+          <button type="button" data-v="0.45">多め</button>
+        </div>
+      </div>
+      <div class="field">
+        <label class="check"><input type="checkbox" id="startTonic"> 1小節目はトニック（I／Im）から</label>
+        <label class="check"><input type="checkbox" id="randomKey"> キーもランダムにする（メジャー／マイナーはそのまま）</label>
+      </div>
+      <div class="field">
+        <span class="label">マイナーの度数表記</span>
+        <div class="seg" id="minorRef" role="group" aria-label="マイナーキーの度数表記">
+          <button type="button" data-v="tonic">主音基準（Im, ♭VI）</button>
+          <button type="button" data-v="relative">平行調基準（VIm, IV）</button>
+        </div>
+      </div>
+    </details>
+
+    <section class="panel">
+      <h2>このキーのダイアトニックコード</h2>
+      <p class="hint">クリックで試聴できます。</p>
+      <div id="diatonic" class="chips"></div>
+    </section>
+
+    <section class="panel">
+      <div class="history-head">
+        <h2>履歴</h2>
+        <div class="seg small" id="historyFilter" role="group" aria-label="履歴の表示">
+          <button type="button" data-v="all">すべて</button>
+          <button type="button" data-v="fav">★ お気に入り</button>
+        </div>
+      </div>
+      <ol id="history" class="history"></ol>
+      <button type="button" id="clearHistory" class="btn ghost small">履歴を消す（お気に入りは残す）</button>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>ショートカット: <kbd>Space</kbd> 再生／停止、<kbd>Enter</kbd> または <kbd>R</kbd> ランダムに提案、<kbd>1</kbd>〜<kbd>4</kbd> その小節を固定</p>
+    <p>コード選びの考え方は <a href="https://github.com/liotier/AkaiMPC" target="_blank" rel="noopener">liotier/AkaiMPC</a>（Unlicense）を参考にしました。</p>
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/theory.js"></script>
+  <script src="js/midi.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
