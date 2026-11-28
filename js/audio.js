@@ -113,6 +113,58 @@
     });
   }
 
+  // 歌メロディ用の音（丸い音色に、伸ばした音だけ少しビブラートをかける）
+  function leadNote(bus, midi, t, dur, vel) {
+    const f = mtof(midi);
+    const o1 = ctx.createOscillator();
+    const o2 = ctx.createOscillator();
+    const g2 = ctx.createGain();
+    const lfo = ctx.createOscillator();
+    const depth = ctx.createGain();
+    const filt = ctx.createBiquadFilter();
+    const env = ctx.createGain();
+    o1.type = 'sine';
+    o1.frequency.value = f;
+    o2.type = 'triangle';
+    o2.frequency.value = f;
+    g2.gain.value = 0.5;
+    lfo.frequency.value = 5.5;
+    depth.gain.setValueAtTime(0, t);
+    depth.gain.linearRampToValueAtTime(0, t + Math.min(0.25, dur * 0.5));
+    depth.gain.linearRampToValueAtTime(f * 0.004, t + Math.max(0.26, dur));
+    lfo.connect(depth);
+    depth.connect(o1.frequency);
+    depth.connect(o2.frequency);
+    filt.type = 'lowpass';
+    filt.frequency.value = 3200;
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(vel, t + 0.02);
+    env.gain.setTargetAtTime(vel * 0.75, t + 0.03, 0.4);
+    env.gain.setTargetAtTime(0, t + dur, 0.05);
+    o1.connect(filt);
+    o2.connect(g2).connect(filt);
+    filt.connect(env).connect(bus);
+    [o1, o2, lfo].forEach((o) => {
+      o.start(t);
+      o.stop(t + dur + 0.4);
+    });
+  }
+
+  // 1小節を8分音符8つに分けた位置（s）を拍に直す。スウィングするドラムでは裏拍を3連の位置にずらす
+  const SWING = ['shuffle', 'triplet', 'jazz'];
+  function slotBeat(s, swing) {
+    return Math.floor(s / 2) + (s % 2 ? (swing ? 2 / 3 : 0.5) : 0);
+  }
+
+  function scheduleMelody(bus, notes, t, beat, rhythm) {
+    const swing = SWING.includes(rhythm);
+    (notes || []).forEach((n) => {
+      const start = slotBeat(n.s, swing);
+      const dur = (slotBeat(n.s + n.l, swing) - start) * beat * 0.92;
+      leadNote(bus, n.p, t + start * beat, dur, 0.26);
+    });
+  }
+
   function chordAt(bus, voicing, bass, t, dur) {
     const vel = 0.5 / Math.max(3, voicing.length);
     voicing.forEach((n) => keyNote(bus, n, t, dur, vel));
@@ -347,6 +399,7 @@
           const i = this.bar % s.voicings.length;
           scheduleBar(this.bus, s.style, s.voicings[i], s.bass[i], this.next, beat);
           scheduleDrums(this.bus, s.rhythm, this.bar, this.next, beat);
+          if (s.melody && s.melody[i]) scheduleMelody(this.bus, s.melody[i], this.next, beat, s.rhythm);
           this.queue.push({ bar: i, time: this.next });
           this.next += beat * 4;
           this.bar += 1;
@@ -381,5 +434,16 @@
     chordAt(previewBus, voicing, bass, ctx.currentTime + 0.02, 1.6);
   }
 
-  global.ChordAudio = { Player, preview, drumEvents, styleEvents };
+  // 1小節ぶんのメロディを、そのコードの白玉と一緒に鳴らす
+  function previewBar(voicing, bass, notes, bpm) {
+    ensureContext();
+    if (previewBus) closeBus(previewBus);
+    previewBus = newBus();
+    const beat = 60 / (bpm || 90);
+    const t = ctx.currentTime + 0.02;
+    chordAt(previewBus, voicing, bass, t, beat * 4);
+    scheduleMelody(previewBus, notes, t, beat);
+  }
+
+  global.ChordAudio = { Player, preview, previewBar, drumEvents, styleEvents, slotBeat };
 })(window);

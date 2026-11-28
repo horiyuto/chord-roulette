@@ -165,6 +165,8 @@ button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-v
   line-height: 1;
 }
 
+.actions .btn[hidden] { display: none; }
+
 .bars {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -187,7 +189,9 @@ button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-v
 
 .bar.locked { border-color: var(--blue); }
 .bar.now { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(242, 182, 76, 0.35); }
-.bar.fresh .chord { animation: pop 0.35s ease-out; }
+.bar.fresh .chord,
+.bar.fresh .tune,
+.bar.fresh-tune .tune { animation: pop 0.35s ease-out; }
 
 @keyframes pop {
   from { opacity: 0; transform: translateY(6px) scale(0.98); }
@@ -195,7 +199,9 @@ button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-v
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bar.fresh .chord { animation: none; }
+  .bar.fresh .chord,
+  .bar.fresh .tune,
+  .bar.fresh-tune .tune { animation: none; }
 }
 
 .bar-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
@@ -247,6 +253,21 @@ button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-v
 .tag-borrowed, .tag-neapolitan { color: var(--violet); }
 .tag-dorian, .tag-harmonic { color: var(--green); }
 .tag-passing { color: var(--blue); }
+
+.tune {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px;
+  cursor: pointer;
+}
+
+.tune:hover { background: var(--panel-2); }
+.tune svg { display: block; width: 100%; height: auto; }
+.tune line { stroke: var(--line); stroke-width: 1; }
+.tune rect { fill: var(--green); }
+.tune text { fill: var(--muted); font-size: 10px; font-family: inherit; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 

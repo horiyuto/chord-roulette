@@ -329,3 +329,13 @@ test('弾き方は1小節の中で拍どおりに鳴り、保存済みの白玉�
     });
   });
 });
+
+test('メロディの裏拍の8分音符は、跳ねるドラムのときだけハイハットに合わせて遅らせる', () => {
+  const window = {};
+  vm.runInNewContext(fs.readFileSync(require.resolve('../js/audio.js'), 'utf8'), { window });
+  const { slotBeat, drumEvents } = window.ChordAudio;
+  assert.deepEqual([0, 1, 2, 3, 8].map((s) => slotBeat(s, false)), [0, 0.5, 1, 1.5, 4]);
+  const swung = [0, 1, 2, 3, 4, 5, 6, 7].map((s) => slotBeat(s, true));
+  const hats = Array.from(drumEvents('shuffle')).filter((e) => e.sound === 'hat').map((e) => e.beat);
+  assert.deepEqual(swung, hats);
+});
