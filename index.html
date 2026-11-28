@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Chord Roulette</title>
-  <meta name="description" content="Roll a chord progression and play it as a 2-, 4- or 8-bar loop with drums.">
+  <meta name="description" content="Roll a chord progression with a singable melody and play it as a 2-, 4- or 8-bar loop with drums.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%B2%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="style.css?v=touch-pickers">
+  <link rel="stylesheet" href="style.css?v=melody">
 </head>
 <body>
   <header class="site-header">
@@ -103,6 +103,7 @@
 
     <section class="actions">
       <button type="button" id="roll" class="btn primary" aria-label="Roll progression" title="Roll progression (R or Enter)">🎲</button>
+      <button type="button" id="newMelody" class="btn" aria-label="New melody" title="New melody (M)">🎵</button>
       <button type="button" id="play" class="btn" aria-label="Play" title="Play (Space)">▶</button>
     </section>
 
@@ -112,6 +113,14 @@
 
     <details class="panel options">
       <summary>Options</summary>
+      <div class="field">
+        <span class="label">Melody</span>
+        <div class="seg" id="melody" role="group" aria-label="Melody">
+          <button type="button" data-v="off">Off</button>
+          <button type="button" data-v="calm" title="Fewer, longer notes">Calm</button>
+          <button type="button" data-v="lively" title="More notes and syncopation">Lively</button>
+        </div>
+      </div>
       <div class="field">
         <span class="label">Feel</span>
         <div class="seg" id="feel" role="group" aria-label="Progression feel">
@@ -169,7 +178,7 @@
   <footer class="site-footer">
     <details>
       <summary>Shortcuts</summary>
-      <p><kbd>Space</kbd> Play / Stop · <kbd>Enter</kbd> / <kbd>R</kbd> Roll · <kbd>1</kbd>–<kbd>8</kbd> Lock bar</p>
+      <p><kbd>Space</kbd> Play / Stop · <kbd>Enter</kbd> / <kbd>R</kbd> Roll · <kbd>M</kbd> New melody · <kbd>1</kbd>–<kbd>8</kbd> Lock bar</p>
     </details>
     <p>Inspired by <a href="https://github.com/liotier/AkaiMPC" target="_blank" rel="noopener">liotier/AkaiMPC</a> (Unlicense)</p>
   </footer>
@@ -177,7 +186,8 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script src="js/theory.js?v=feel"></script>
-  <script src="js/audio.js"></script>
-  <script src="js/app.js?v=feel"></script>
+  <script src="js/melody.js?v=melody"></script>
+  <script src="js/audio.js?v=melody"></script>
+  <script src="js/app.js?v=melody"></script>
 </body>
 </html>

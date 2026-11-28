@@ -4,7 +4,10 @@
 
   const T = window.ChordTheory;
   const A = window.ChordAudio;
+  // 古いページ（melody.js を読み込まない HTML）でも動くよう、メロディはあるときだけ使う
+  const M = window.ChordMelody || null;
   const BAR_COUNTS = [2, 4, 8];
+  const MELODY_STYLES = ['off', 'calm', 'lively'];
   const STORE_SETTINGS = 'chord-roulette:settings';
   const STORE_HISTORY = 'chord-roulette:history';
   const HISTORY_MAX = 40;
@@ -22,6 +25,7 @@
     color: 'mix',
     outside: '0.2',
     feel: 'balanced',
+    melody: 'calm',
     startTonic: false,
     randomKey: true,
     settingsVersion: 2,
@@ -33,7 +37,10 @@
   const state = Object.assign({}, defaults, storedSettings);
   if ((storedSettings.settingsVersion || 1) < 2) state.randomKey = true;
   if (!Object.hasOwn(T.FEELS, state.feel)) state.feel = defaults.feel;
+  if (!MELODY_STYLES.includes(state.melody)) state.melody = defaults.melody;
   state.chords = [];
+  state.tune = [];
+  let tuneStyle = null;
   state.bars = BAR_COUNTS.includes(Number(state.bars)) ? Number(state.bars) : 4;
   state.locks = Array.from({ length: state.bars }, () => false);
   let undo = [];
@@ -92,20 +99,52 @@
     }, extra);
   }
 
-  // 小節ごとに、変わる前のコードを積んでおく（このページを開いている間だけ）
+  // ---- メロディ ----
+  const melodyOn = () => !!M && state.melody !== 'off';
+  const melodyStyle = () => (state.melody === 'lively' ? 'lively' : 'calm');
+  const barCode = (notes) => (notes || []).map((n) => `${n.s}.${n.l}.${n.p}`).join(',');
+  const tuneCode = (tune) => (M ? M.encode(tune) : '');
+
+  // keep[i] の小節はそのまま、rhythms[i] があればそのリズムで作り直す
+  function newTune(keep, rhythms) {
+    if (!M) return state.chords.map(() => []);
+    tuneStyle = melodyStyle();
+    return M.generate({
+      keyPc: state.keyPc,
+      mode: state.mode,
+      chords: state.chords,
+      style: tuneStyle,
+      current: state.tune,
+      keep: keep || [],
+      rhythms: rhythms || [],
+    });
+  }
+
+  function savedTune(code) {
+    const tune = M && code ? M.decode(code, state.chords.length) : null;
+    if (!tune) return newTune([]);
+    tuneStyle = melodyStyle();
+    return tune;
+  }
+
+  // 小節ごとに、変わる前のコードとメロディを積んでおく（このページを開いている間だけ）
   function resetUndo() {
     undo = state.chords.map(() => []);
   }
 
   function snapshot() {
-    return { keyPc: state.keyPc, chords: state.chords };
+    return { keyPc: state.keyPc, chords: state.chords, tune: state.tune };
   }
 
   function pushUndo(before) {
     state.chords.forEach((c, i) => {
       const chord = before.chords[i];
-      if (!chord || T.chordName(state.keyPc, state.mode, c) === T.chordName(before.keyPc, state.mode, chord)) return;
-      undo[i] = (undo[i] || []).concat([{ keyPc: before.keyPc, chord }]).slice(-UNDO_MAX);
+      if (!chord) return;
+      const tune = before.tune[i] || [];
+      const sameChord = T.chordName(state.keyPc, state.mode, c) === T.chordName(before.keyPc, state.mode, chord);
+      // メロディを隠しているときは、見えないメロディだけの変化を戻す対象にしない
+      if (sameChord && (!melodyOn() || barCode(state.tune[i]) === barCode(tune))) return;
+      undo[i] = (undo[i] || []).concat([{ keyPc: before.keyPc, chord, tune }]).slice(-UNDO_MAX);
     });
   }
 
@@ -114,6 +153,8 @@
     const previous = undo[i].pop();
     state.chords = state.chords.slice();
     state.chords[i] = T.rebaseChord(previous.chord, previous.keyPc, state.keyPc, state.mode);
+    state.tune = state.tune.slice();
+    state.tune[i] = previous.tune;
     render(false, i);
   }
 
@@ -121,6 +162,7 @@
     const before = snapshot();
     randomizeKey();
     state.chords = T.generate(options(), state.chords, state.locks);
+    state.tune = newTune(state.locks);
     pushUndo(before);
     render(true);
   }
@@ -129,8 +171,18 @@
     state.locks = Array.from({ length: state.bars }, () => false);
     randomizeKey();
     state.chords = T.generate(options(), [], []);
+    state.tune = newTune([]);
     resetUndo();
     render(true);
+  }
+
+  // 固定していない小節のメロディだけを作り直す（コードはそのまま）
+  function newMelody() {
+    if (!melodyOn()) return;
+    const before = snapshot();
+    state.tune = newTune(state.locks);
+    pushUndo(before);
+    render(false, 'tune');
   }
 
   function randomizeKey() {
@@ -141,6 +193,7 @@
     state.chords = state.chords.map((chord, i) => state.locks[i]
       ? T.rebaseChord(chord, state.keyPc, keyPc, state.mode)
       : chord);
+    if (M) state.tune = M.transpose(state.tune, keyPc - state.keyPc, state.locks);
     state.keyPc = keyPc;
   }
 
@@ -148,24 +201,32 @@
     const locks = state.locks.map((_, j) => j !== i);
     const before = snapshot();
     state.chords = T.generate(options({ startTonic: false, avoid: { [i]: state.chords[i] } }), state.chords, locks);
+    state.tune = newTune(locks, { [i]: M && M.rhythmOf(state.tune[i]) });
     pushUndo(before);
     render(false, i);
   }
 
   // ---- 履歴 ----
   function currentEntry() {
-    return { keyPc: state.keyPc, mode: state.mode, bars: state.bars, code: T.encodeChords(state.chords) };
+    const entry = { keyPc: state.keyPc, mode: state.mode, bars: state.bars, code: T.encodeChords(state.chords) };
+    if (M) entry.mel = tuneCode(state.tune);
+    return entry;
   }
 
   function sameEntry(a, b) {
     return a.keyPc === b.keyPc && a.mode === b.mode && (a.bars || 4) === (b.bars || 4) && a.code === b.code;
   }
 
+  // 同じコードの履歴は、メロディも同じものを優先する。★を付けていない履歴は今のメロディに置き換え、
+  // ★付きでメロディが違うときは別の履歴として残す
   function rememberCurrent() {
     const cur = currentEntry();
-    if (saved.length && sameEntry(saved[0], cur)) return;
-    const found = saved.find((h) => sameEntry(h, cur));
+    const same = (h) => sameEntry(h, cur);
+    const found = saved.find((h) => same(h) && (!h.mel || h.mel === cur.mel))
+      || saved.find((h) => same(h) && !h.fav);
+    if (found && found === saved[0] && (!cur.mel || found.mel === cur.mel)) return;
     if (found) {
+      if (cur.mel) found.mel = cur.mel;
       saved = [found].concat(saved.filter((h) => h !== found));
     } else {
       saved.unshift(Object.assign(cur, { fav: false, at: Date.now() }));
@@ -183,6 +244,7 @@
     state.bars = chords.length;
     state.chords = chords;
     state.locks = Array.from({ length: state.bars }, () => false);
+    state.tune = savedTune(h.mel);
     resetUndo();
     render(true);
   }
@@ -249,6 +311,8 @@
     renderSeg('color', state.color);
     renderSeg('outside', state.outside);
     renderSeg('feel', state.feel);
+    if ($('melody')) renderSeg('melody', state.melody);
+    if ($('newMelody')) $('newMelody').hidden = !melodyOn();
     renderSeg('minorRef', state.minorRef);
     renderSeg('historyFilter', state.historyFilter);
     $('bpm').value = state.bpm;
@@ -259,20 +323,56 @@
     ['key', 'style', 'rhythm'].forEach(renderTouchPicker);
   }
 
+  // 1小節のメロディを、8分音符の目盛りに音の高さと音名を並べた小さな譜面にする
+  function tuneSvg(notes, labels, lo, hi) {
+    const slot = 20;
+    const top = 16;
+    const bottom = 60;
+    const y = (p) => top + ((hi - p) / (hi - lo)) * (bottom - top);
+    const lines = [2, 4, 6].map((s) => `<line x1="${s * slot}" y1="2" x2="${s * slot}" y2="62"/>`).join('');
+    const marks = notes.map((n, k) => {
+      const x = n.s * slot;
+      const ny = y(n.p);
+      return `<rect x="${x + 1}" y="${ny.toFixed(1)}" width="${n.l * slot - 2}" height="4" rx="2"/>`
+        + `<text x="${x + 2}" y="${(ny - 3).toFixed(1)}">${labels[k]}</text>`;
+    }).join('');
+    return `<svg viewBox="0 0 160 64" aria-hidden="true" focusable="false">${lines}${marks}</svg>`;
+  }
+
+  function tuneRange() {
+    const ps = [].concat(...state.tune).map((n) => n.p);
+    let lo = ps.length ? Math.min(...ps) - 1 : 60;
+    let hi = ps.length ? Math.max(...ps) + 1 : 72;
+    const extra = 14 - (hi - lo);
+    if (extra > 0) {
+      lo -= Math.floor(extra / 2);
+      hi += Math.ceil(extra / 2);
+    }
+    return [lo, hi];
+  }
+
   function renderBars(changedIndex) {
     const box = $('bars');
     box.dataset.count = String(state.chords.length);
     const ns = names(state.chords);
     const rs = romans(state.chords);
+    const showTune = melodyOn();
+    const [lo, hi] = showTune ? tuneRange() : [0, 1];
     box.innerHTML = '';
     state.chords.forEach((c, i) => {
       const card = document.createElement('article');
       card.className = 'bar';
       if (state.locks[i]) card.classList.add('locked');
       if (changedIndex === 'all' || changedIndex === i) card.classList.add('fresh');
+      if (changedIndex === 'tune' && !state.locks[i]) card.classList.add('fresh-tune');
       card.dataset.i = i;
       const n = i + 1;
       const canUndo = !!(undo[i] && undo[i].length);
+      const notes = state.tune[i] || [];
+      const labels = showTune ? M.noteNames(state.keyPc, state.mode, c, notes) : [];
+      const tune = showTune
+        ? `<button type="button" class="tune" title="Play melody" aria-label="Play melody, bar ${n}: ${labels.join(' ') || 'rest'}">${tuneSvg(notes, labels, lo, hi)}</button>`
+        : '';
       card.innerHTML = `
         <div class="bar-head">
           <span class="bar-no">${n}</span>
@@ -286,7 +386,7 @@
           <span class="name">${ns[i]}</span>
           <span class="roman">${rs[i]}</span>
         </button>
-        <div class="tag tag-${c.tag}">${T.tagLabel(c, state.mode, state.minorRef)}</div>`;
+        <div class="tag tag-${c.tag}">${T.tagLabel(c, state.mode, state.minorRef)}</div>${tune}`;
       box.appendChild(card);
     });
   }
@@ -350,6 +450,7 @@
       t: String(state.bpm),
       b: String(state.bars),
     });
+    if (M) p.set('mel', tuneCode(state.tune));
     window.history.replaceState(null, '', `#${p.toString()}`);
   }
 
@@ -365,7 +466,10 @@
 
   // ---- 再生 ----
   function playState() {
-    return { bpm: state.bpm, style: state.style, rhythm: state.rhythm, voicings: voicings(), bass: basses() };
+    return {
+      bpm: state.bpm, style: state.style, rhythm: state.rhythm, voicings: voicings(), bass: basses(),
+      melody: melodyOn() ? state.tune : null,
+    };
   }
 
   function highlight(i) {
@@ -429,6 +533,7 @@
   function bind() {
     $('roll').addEventListener('click', roll);
     $('play').addEventListener('click', togglePlay);
+    if ($('newMelody')) $('newMelody').addEventListener('click', newMelody);
 
     bindPicker('key', (value) => {
       const before = snapshot();
@@ -466,6 +571,19 @@
     bindSeg('color', (v) => { state.color = v; renderSeg('color', v); renderDiatonic(); saveSettings(); });
     bindSeg('outside', (v) => { state.outside = v; renderSeg('outside', v); saveSettings(); });
     bindSeg('feel', (v) => { state.feel = v; renderSeg('feel', v); saveSettings(); });
+    // Off にしてもメロディは残し、表示と再生だけ止める。Calm / Lively を切り替えたときは作り直す
+    if ($('melody')) {
+      bindSeg('melody', (v) => {
+        if (!MELODY_STYLES.includes(v) || v === state.melody) return;
+        state.melody = v;
+        if (v !== 'off' && M && tuneStyle !== v) {
+          const before = snapshot();
+          state.tune = newTune(state.locks);
+          pushUndo(before);
+        }
+        render(false, v === 'off' ? null : 'tune');
+      });
+    }
     bindSeg('minorRef', (v) => { state.minorRef = v; render(false, null); });
     bindSeg('historyFilter', (v) => { state.historyFilter = v; renderSeg('historyFilter', v); renderHistory(); saveSettings(); });
 
@@ -480,6 +598,7 @@
       if (e.target.closest('.lock')) toggleLock(i);
       else if (e.target.closest('.undo')) undoOne(i);
       else if (e.target.closest('.reroll')) rerollOne(i);
+      else if (e.target.closest('.tune')) { if (A.previewBar) A.previewBar(voicings()[i], basses()[i], state.tune[i], state.bpm); }
       else if (e.target.closest('.chord')) A.preview(voicings()[i], basses()[i]);
     });
 
@@ -512,6 +631,9 @@
       } else if (e.key === 'Enter' || e.key === 'r' || e.key === 'R') {
         e.preventDefault();
         roll();
+      } else if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault();
+        newMelody();
       } else if (/^[1-8]$/.test(e.key) && Number(e.key) <= state.bars) {
         toggleLock(Number(e.key) - 1);
       }
@@ -534,14 +656,17 @@
     if (!chords || !BAR_COUNTS.includes(bars) || chords.length !== bars) return false;
     const k = Number(p.get('k'));
     const t = Number(p.get('t'));
+    const tune = M && p.get('mel') ? M.decode(p.get('mel'), bars) : null;
     if (T.encodeChords(chords) === T.encodeChords(state.chords)
-      && mode === state.mode && k === state.keyPc && bars === state.bars) return false;
+      && mode === state.mode && k === state.keyPc && bars === state.bars
+      && (!tune || tuneCode(tune) === tuneCode(state.tune))) return false;
     state.mode = mode;
     state.keyPc = Number.isInteger(k) ? T.mod(k, 12) : state.keyPc;
     state.bars = bars;
     if (t >= 50 && t <= 180) state.bpm = Math.round(t);
     state.chords = chords;
     state.locks = Array.from({ length: state.bars }, () => false);
+    state.tune = savedTune(tune && p.get('mel'));
     return true;
   }
 
@@ -551,6 +676,7 @@
     if (!readHash()) {
       randomizeKey();
       state.chords = T.generate(options(), [], []);
+      state.tune = newTune([]);
     }
     resetUndo();
     bind();

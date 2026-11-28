@@ -5,6 +5,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const T = require('../js/theory.js');
+const M = require('../js/melody.js');
+const J = JSON.stringify;
 
 function element() {
   const selectors = new Map();
@@ -24,7 +26,7 @@ function element() {
   };
 }
 
-function openApp(hash, entries, { random = Math.random, theory = T, settings } = {}) {
+function openApp(hash, entries, { random = Math.random, theory = T, melody = M, settings } = {}) {
   const html = fs.readFileSync(require.resolve('../index.html'), 'utf8');
   const nodes = new Map(Array.from(html.matchAll(/ id="([^"]+)"/g), (m) => [m[1], Object.assign(element(), { id: m[1] })]));
   for (const [, id, content] of html.matchAll(/<select id="([^"]+)">([\s\S]*?)<\/select>/g)) {
@@ -41,8 +43,10 @@ function openApp(hash, entries, { random = Math.random, theory = T, settings } =
   const previews = [];
   const window = Object.assign(element(), {
     ChordTheory: theory,
+    ChordMelody: melody,
     ChordAudio: {
       preview: (notes, bass) => previews.push({ notes, bass }),
+      previewBar: (notes, bass, tune, bpm) => previews.push({ notes, bass, tune, bpm }),
       Player: { playing: false, start(getState) { this.playing = true; this.getState = getState; }, stop() { this.playing = false; } },
     },
     history: { replaceState(_state, _title, url) { location.hash = url; } },
@@ -174,7 +178,9 @@ test('共有URL・移調・1小節の再提案を履歴からお気に入りに�
   assert.equal(sharedFavorite.fav, true);
 
   app.node('key').change({ target: { value: '0' } });
-  assert.deepEqual(current(), legacy);
+  const legacyNow = current();
+  assert.deepEqual(legacyNow, Object.assign({}, legacy, { mel: legacyNow.mel }));
+  assert.ok(M.decode(legacyNow.mel, 4));
   assert.equal(app.entries().length, 2);
 
   const card = app.node('bars').children[1];
@@ -191,7 +197,7 @@ test('共有URL・移調・1小節の再提案を履歴からお気に入りに�
   app.node('historyFilter').click({ target: { closest: () => ({ dataset: { v: 'fav' } }) } });
   assert.equal(app.node('history').children.length, 3);
   app.node('clearHistory').click();
-  assert.deepEqual(app.entries(), [displayed, legacy, sharedFavorite]);
+  assert.deepEqual(app.entries(), [displayed, legacyNow, sharedFavorite]);
   firstStar().click();
   assert.equal(current().fav, true);
 });
@@ -286,14 +292,17 @@ test('コードとキーが同時に変わる全体提案を重ねても、選�
   versions.push(app.names());
   app.node('roll').click();
   const latest = app.names();
-  let name = latest[0];
-  for (const previous of versions.reverse()) {
-    if (previous[0] === name) continue;
+  // メロディだけが変わった全体提案も戻す対象になるので、コード名が変わる段だけを順に確かめる
+  const expected = versions.reverse().map((v) => v[0]).filter((n, k, a) => n !== (k ? a[k - 1] : latest[0]));
+  const seen = [];
+  for (let n = 0; n < 10 && !/ disabled>↶/.test(app.node('bars').children[0].html); n++) {
     app.clickBar(0, '.undo');
-    assert.deepEqual(app.names(), [previous[0], ...latest.slice(1)]);
+    assert.deepEqual(app.names().slice(1), latest.slice(1));
     assert.equal(app.entries()[0].keyPc, 2);
-    name = previous[0];
+    const name = app.names()[0];
+    if (name !== (seen.length ? seen[seen.length - 1] : latest[0])) seen.push(name);
   }
+  assert.deepEqual(seen, expected);
   assert.equal(app.names()[0], 'C');
   assert.ok(/ disabled>↶/.test(app.node('bars').children[0].html));
 });
@@ -366,4 +375,163 @@ test('固定は度数ではなくコードそのものを、ランダム・手�
   app.clickBar(0, '.undo');
   assert.deepEqual(app.names(), before);
   assert.equal(app.entries()[0].keyPc, 5);
+});
+
+function seededMelody(seed) {
+  let s = seed >>> 0;
+  const rng = () => {
+    s = (s * 1664525 + 1013904223) % 4294967296;
+    return s / 4294967296;
+  };
+  return Object.assign({}, M, { generate: (o) => M.generate(Object.assign({ rng }, o)) });
+}
+
+const hashParam = (app, name) => new URLSearchParams(app.location.hash.slice(1)).get(name);
+const tuneOf = (app) => M.decode(hashParam(app, 'mel'));
+const pick = (app, id, v) => app.node(id).click({ target: { closest: () => ({ dataset: { v } }) } });
+const pressKey = (app, key) => app.document.keydown({ key, target: { closest: () => null }, preventDefault() {} });
+const hasTune = (app) => app.node('bars').children.map((card) => /class="tune"/.test(card.html));
+
+test('メロディは各小節に音名つきで表示・再生され、URLと履歴に残り、そのまま開き直せる', () => {
+  const code = 'I.maj_VIm.m_IV.maj_V.dom7';
+  const app = openApp(`#m=major&k=0&c=${code}&t=96`, [], { melody: seededMelody(1) });
+  const tune = tuneOf(app);
+  assert.equal(tune.length, 4);
+  assert.ok(tune.every((notes) => notes.length > 0));
+  assert.equal(app.entries()[0].mel, hashParam(app, 'mel'));
+  const chords = T.decodeChords('major', code);
+  app.node('bars').children.forEach((card, i) => {
+    const labels = M.noteNames(0, 'major', chords[i], tune[i]);
+    assert.ok(card.html.includes(`aria-label="Play melody, bar ${i + 1}: ${labels.join(' ')}"`), card.html);
+  });
+  assert.equal(app.node('newMelody').hidden, false);
+
+  app.node('play').click();
+  assert.deepEqual(app.window.ChordAudio.Player.getState().melody, tune);
+  app.clickBar(2, '.tune');
+  assert.deepEqual(app.previews.at(-1).tune, tune[2]);
+  assert.equal(app.previews.at(-1).bpm, 96);
+
+  const reopened = openApp(app.location.hash, []);
+  assert.deepEqual(tuneOf(reopened), tune);
+  const legacyUrl = openApp(`#m=major&k=0&c=${code}&t=96`, []);
+  assert.equal(tuneOf(legacyUrl).length, 4);
+  const broken = openApp(`#m=major&k=0&c=${code}&t=96&mel=zz`, []);
+  assert.equal(tuneOf(broken).length, 4);
+  assert.deepEqual(broken.names(), app.names());
+});
+
+test('🎵 と M キーは固定していない小節のメロディだけ作り直し、コードは変えず、小節ごとに戻せる', () => {
+  const app = openApp('#m=major&k=0&c=I.maj_VIm.m_IV.maj_V.dom7&t=90', [], { melody: seededMelody(2) });
+  const names = app.names();
+  const first = tuneOf(app);
+  app.clickBar(1, '.lock');
+  app.node('newMelody').click();
+  const second = tuneOf(app);
+  assert.deepEqual(app.names(), names);
+  assert.deepEqual(second[1], first[1]);
+  const changed = [0, 2, 3].filter((i) => J(second[i]) !== J(first[i]));
+  assert.ok(changed.length > 0);
+  assert.ok(/ disabled>↶/.test(app.node('bars').children[1].html));
+
+  pressKey(app, 'm');
+  const third = tuneOf(app);
+  assert.deepEqual(third[1], first[1]);
+  app.clickBar(changed[0], '.undo');
+  const undone = tuneOf(app);
+  assert.deepEqual(undone[changed[0]], second[changed[0]]);
+  assert.deepEqual(undone.filter((_, i) => i !== changed[0]), third.filter((_, i) => i !== changed[0]));
+  assert.deepEqual(app.names(), names);
+});
+
+test('🎲 でも固定した小節はコードとメロディを保ち、1小節の再提案はその小節のリズムを保つ', () => {
+  const keys = [5];
+  const app = openApp('#m=major&k=0&c=I.maj_VIm.m_IV.maj_V.dom7&t=90', [], {
+    melody: seededMelody(3), random: () => keys.shift() / 12,
+  });
+  const names = app.names();
+  const first = tuneOf(app);
+  app.clickBar(0, '.lock');
+  app.node('roll').click();
+  assert.equal(app.entries()[0].keyPc, 5);
+  assert.equal(app.names()[0], names[0]);
+  assert.deepEqual(tuneOf(app)[0], first[0]);
+
+  const before = tuneOf(app);
+  const beforeNames = app.names();
+  app.clickBar(2, '.reroll');
+  const after = tuneOf(app);
+  assert.notEqual(app.names()[2], beforeNames[2]);
+  assert.deepEqual(M.rhythmOf(after[2]), M.rhythmOf(before[2]));
+  assert.deepEqual(after.filter((_, i) => i !== 2), before.filter((_, i) => i !== 2));
+});
+
+test('キーを変えると固定していない小節のメロディは同じ幅で移調し、固定した小節はそのまま', () => {
+  const app = openApp('#m=major&k=0&c=I.maj_VIm.m_IV.maj_V.dom7&t=90', [], { melody: seededMelody(4) });
+  const first = tuneOf(app);
+  app.clickBar(3, '.lock');
+  app.node('key').change({ target: { value: '2' } });
+  const moved = tuneOf(app);
+  assert.deepEqual(moved[3], first[3]);
+  const shift = moved[0][0].p - first[0][0].p;
+  assert.ok(shift === 2 || shift === -10, String(shift));
+  [0, 1, 2].forEach((i) => assert.deepEqual(moved[i], first[i].map((n) => Object.assign({}, n, { p: n.p + shift }))));
+  app.clickBar(0, '.undo');
+  assert.deepEqual(tuneOf(app)[0], first[0]);
+});
+
+test('Melody を Off にすると表示・再生・🎵を止め、Calm / Lively に戻すと続きから使える', () => {
+  const app = openApp('#m=minor&k=9&c=Im.m_bVI.maj_bIII.maj_bVII.maj&t=90', [], { melody: seededMelody(5) });
+  const calm = tuneOf(app);
+  app.node('play').click();
+  pick(app, 'melody', 'off');
+  assert.equal(app.settings().melody, 'off');
+  assert.deepEqual(hasTune(app), [false, false, false, false]);
+  assert.equal(app.node('newMelody').hidden, true);
+  assert.equal(app.window.ChordAudio.Player.getState().melody, null);
+  pressKey(app, 'M');
+  assert.deepEqual(tuneOf(app), calm);
+  assert.equal(openApp(app.location.hash, [], { settings: app.settings() }).node('newMelody').hidden, true);
+
+  pick(app, 'melody', 'calm');
+  assert.deepEqual(tuneOf(app), calm);
+  assert.deepEqual(hasTune(app), [true, true, true, true]);
+  assert.deepEqual(app.window.ChordAudio.Player.getState().melody, calm);
+
+  pick(app, 'melody', 'lively');
+  const lively = tuneOf(app);
+  assert.notDeepEqual(lively, calm);
+  assert.ok([].concat(...lively).length > [].concat(...calm).length);
+  app.clickBar(0, '.undo');
+  assert.deepEqual(tuneOf(app)[0], calm[0]);
+});
+
+test('★を付けた履歴はそのときのメロディを保ち、付けていない履歴は今のメロディに置き換わる', () => {
+  const app = openApp('#m=major&k=0&c=I.maj_VIm.m_IV.maj_V.dom7&t=90', [], { melody: seededMelody(6) });
+  const starred = hashParam(app, 'mel');
+  app.node('history').children[0].querySelector('.star').click();
+  app.node('newMelody').click();
+  assert.equal(app.entries().length, 2);
+  assert.equal(app.entries()[1].mel, starred);
+  app.node('newMelody').click();
+  const latest = hashParam(app, 'mel');
+  assert.deepEqual(app.entries().map((h) => h.mel), [latest, starred]);
+
+  app.node('history').children[1].querySelector('.load').click();
+  assert.equal(hashParam(app, 'mel'), starred);
+  assert.equal(app.entries()[0].mel, starred);
+  assert.equal(app.entries().length, 2);
+});
+
+test('melody.js を読み込まない古いページでも、メロディなしでこれまでどおり動く', () => {
+  const app = openApp('#m=major&k=0&c=I.maj_IV.maj&t=90&b=2', [], { melody: null });
+  assert.equal(hashParam(app, 'mel'), null);
+  assert.deepEqual(hasTune(app), [false, false]);
+  assert.equal(app.node('newMelody').hidden, true);
+  app.node('roll').click();
+  app.clickBar(0, '.reroll');
+  pressKey(app, 'm');
+  app.node('play').click();
+  assert.equal(app.window.ChordAudio.Player.getState().melody, null);
+  assert.ok(app.entries().every((h) => !('mel' in h)));
 });
